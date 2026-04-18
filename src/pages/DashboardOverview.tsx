@@ -60,12 +60,21 @@ export default function DashboardOverview() {
   const [detailBild, setDetailBild] = useState<EnrichedBilderfassung | null>(null);
 
   const filteredBilder = useMemo(() => {
-    if (!selectedKamera) return enrichedBilderfassung;
-    return enrichedBilderfassung.filter(b => {
-      const url = b.fields.kamera_referenz;
-      if (!url) return false;
-      return url.includes(selectedKamera.record_id);
-    });
+    const list = !selectedKamera
+      ? enrichedBilderfassung
+      : enrichedBilderfassung.filter(b => {
+          const url = b.fields.kamera_referenz;
+          if (!url) return false;
+          return url.includes(selectedKamera.record_id);
+        });
+    return list
+      .slice()
+      .sort((a, b) => {
+        const da = a.fields.aufnahmezeitpunkt ? new Date(a.fields.aufnahmezeitpunkt).getTime() : 0;
+        const db = b.fields.aufnahmezeitpunkt ? new Date(b.fields.aufnahmezeitpunkt).getTime() : 0;
+        return db - da;
+      })
+      .slice(0, 10);
   }, [enrichedBilderfassung, selectedKamera]);
 
   const bilder_per_kamera = useMemo(() => {
@@ -215,6 +224,7 @@ export default function DashboardOverview() {
             <div className="min-w-0">
               <h2 className="font-semibold text-sm text-foreground truncate">
                 {selectedKamera ? selectedKamera.fields.kamera_name ?? 'Aufnahmen' : 'Alle Aufnahmen'}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(neueste 10)</span>
               </h2>
               {selectedKamera?.fields.kamera_standort && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
