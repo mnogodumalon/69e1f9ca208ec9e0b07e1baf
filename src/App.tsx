@@ -1,31 +1,42 @@
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import { ActionsProvider } from '@/context/ActionsContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ErrorBusProvider } from '@/components/ErrorBus';
 import { Layout } from '@/components/Layout';
 import DashboardOverview from '@/pages/DashboardOverview';
 import AdminPage from '@/pages/AdminPage';
-import WebkameraVerwaltungPage from '@/pages/WebkameraVerwaltungPage';
 import BilderfassungPage from '@/pages/BilderfassungPage';
+import WebkameraVerwaltungPage from '@/pages/WebkameraVerwaltungPage';
+import PublicFormBilderfassung from '@/pages/public/PublicForm_Bilderfassung';
+import PublicFormWebkameraVerwaltung from '@/pages/public/PublicForm_WebkameraVerwaltung';
+// <public:imports>
+// </public:imports>
 // <custom:imports>
 // </custom:imports>
 
 export default function App() {
   return (
     <ErrorBoundary>
-      <HashRouter>
-        <ActionsProvider>
-          <Routes>
-            <Route element={<Layout />}>
-              <Route index element={<DashboardOverview />} />
-              <Route path="webkamera-verwaltung" element={<WebkameraVerwaltungPage />} />
-              <Route path="bilderfassung" element={<BilderfassungPage />} />
-              <Route path="admin" element={<AdminPage />} />
-              {/* <custom:routes> */}
+      <ErrorBusProvider>
+        <HashRouter>
+          <ActionsProvider>
+            <Routes>
+              <Route path="public/69e1f9bc1913ab36ef161891" element={<PublicFormBilderfassung />} />
+              <Route path="public/69e1f9b9e099184b4f891185" element={<PublicFormWebkameraVerwaltung />} />
+              {/* <public:routes> */}
+              {/* </public:routes> */}
+              <Route element={<Layout />}>
+                <Route index element={<DashboardOverview />} />
+                <Route path="bilderfassung" element={<BilderfassungPage />} />
+                <Route path="webkamera-verwaltung" element={<WebkameraVerwaltungPage />} />
+                <Route path="admin" element={<AdminPage />} />
+                {/* <custom:routes> */}
               {/* </custom:routes> */}
-            </Route>
-          </Routes>
-        </ActionsProvider>
-      </HashRouter>
+              </Route>
+            </Routes>
+          </ActionsProvider>
+        </HashRouter>
+      </ErrorBusProvider>
     </ErrorBoundary>
   );
 }

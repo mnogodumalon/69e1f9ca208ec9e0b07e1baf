@@ -1,11 +1,11 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import type { WebkameraVerwaltung, Bilderfassung } from '@/types/app';
+import type { Bilderfassung, WebkameraVerwaltung } from '@/types/app';
 import { LivingAppsService, extractRecordId, cleanFieldsForApi } from '@/services/livingAppsService';
-import { WebkameraVerwaltungDialog } from '@/components/dialogs/WebkameraVerwaltungDialog';
-import { WebkameraVerwaltungViewDialog } from '@/components/dialogs/WebkameraVerwaltungViewDialog';
 import { BilderfassungDialog } from '@/components/dialogs/BilderfassungDialog';
 import { BilderfassungViewDialog } from '@/components/dialogs/BilderfassungViewDialog';
+import { WebkameraVerwaltungDialog } from '@/components/dialogs/WebkameraVerwaltungDialog';
+import { WebkameraVerwaltungViewDialog } from '@/components/dialogs/WebkameraVerwaltungViewDialog';
 import { BulkEditDialog } from '@/components/dialogs/BulkEditDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
@@ -32,14 +32,6 @@ function fmtDate(d?: string) {
 }
 
 // Field metadata per entity for bulk edit and column filters
-const WEBKAMERAVERWALTUNG_FIELDS = [
-  { key: 'kamera_name', label: 'Kameraname', type: 'string/text' },
-  { key: 'kamera_standort', label: 'Standortbeschreibung', type: 'string/text' },
-  { key: 'kamera_url', label: 'Stream-URL', type: 'string/url' },
-  { key: 'kamera_geo', label: 'Geografischer Standort', type: 'geo' },
-  { key: 'kamera_beschreibung', label: 'Beschreibung', type: 'string/textarea' },
-  { key: 'kamera_status', label: 'Status', type: 'lookup/radio', options: [{ key: 'aktiv', label: 'Aktiv' }, { key: 'inaktiv', label: 'Inaktiv' }, { key: 'wartung', label: 'In Wartung' }] },
-];
 const BILDERFASSUNG_FIELDS = [
   { key: 'kamera_referenz', label: 'Webkamera', type: 'applookup/select', targetEntity: 'webkamera_verwaltung', targetAppId: 'WEBKAMERA_VERWALTUNG', displayField: 'kamera_name' },
   { key: 'aufnahmezeitpunkt', label: 'Aufnahmezeitpunkt', type: 'date/datetimeminute' },
@@ -51,10 +43,18 @@ const BILDERFASSUNG_FIELDS = [
   { key: 'ki_messwert', label: 'Messwert', type: 'number' },
   { key: 'ki_kriterium_erfuellt', label: 'Kriterium erfüllt', type: 'bool' },
 ];
+const WEBKAMERAVERWALTUNG_FIELDS = [
+  { key: 'kamera_name', label: 'Kameraname', type: 'string/text' },
+  { key: 'kamera_standort', label: 'Standortbeschreibung', type: 'string/text' },
+  { key: 'kamera_url', label: 'Stream-URL', type: 'string/url' },
+  { key: 'kamera_geo', label: 'Geografischer Standort', type: 'geo' },
+  { key: 'kamera_beschreibung', label: 'Beschreibung', type: 'string/textarea' },
+  { key: 'kamera_status', label: 'Status', type: 'lookup/radio', options: [{ key: 'aktiv', label: 'Aktiv' }, { key: 'inaktiv', label: 'Inaktiv' }, { key: 'wartung', label: 'In Wartung' }] },
+];
 
 const ENTITY_TABS = [
-  { key: 'webkamera_verwaltung', label: 'Webkamera-Verwaltung', pascal: 'WebkameraVerwaltung' },
   { key: 'bilderfassung', label: 'Bilderfassung', pascal: 'Bilderfassung' },
+  { key: 'webkamera_verwaltung', label: 'Webkamera-Verwaltung', pascal: 'WebkameraVerwaltung' },
 ] as const;
 
 type EntityKey = typeof ENTITY_TABS[number]['key'];
@@ -63,14 +63,14 @@ export default function AdminPage() {
   const data = useDashboardData();
   const { loading, error, fetchAll } = data;
 
-  const [activeTab, setActiveTab] = useState<EntityKey>('webkamera_verwaltung');
+  const [activeTab, setActiveTab] = useState<EntityKey>('bilderfassung');
   const [selectedIds, setSelectedIds] = useState<Record<EntityKey, Set<string>>>(() => ({
-    'webkamera_verwaltung': new Set(),
     'bilderfassung': new Set(),
+    'webkamera_verwaltung': new Set(),
   }));
   const [filters, setFilters] = useState<Record<EntityKey, Record<string, string>>>(() => ({
-    'webkamera_verwaltung': {},
     'bilderfassung': {},
+    'webkamera_verwaltung': {},
   }));
   const [showFilters, setShowFilters] = useState(false);
   const [dialogState, setDialogState] = useState<{ entity: EntityKey; record: any } | null>(null);
@@ -85,8 +85,8 @@ export default function AdminPage() {
 
   const getRecords = useCallback((entity: EntityKey) => {
     switch (entity) {
-      case 'webkamera_verwaltung': return (data as any).webkameraVerwaltung as WebkameraVerwaltung[] ?? [];
       case 'bilderfassung': return (data as any).bilderfassung as Bilderfassung[] ?? [];
+      case 'webkamera_verwaltung': return (data as any).webkameraVerwaltung as WebkameraVerwaltung[] ?? [];
       default: return [];
     }
   }, [data]);
@@ -116,8 +116,8 @@ export default function AdminPage() {
 
   const getFieldMeta = useCallback((entity: EntityKey) => {
     switch (entity) {
-      case 'webkamera_verwaltung': return WEBKAMERAVERWALTUNG_FIELDS;
       case 'bilderfassung': return BILDERFASSUNG_FIELDS;
+      case 'webkamera_verwaltung': return WEBKAMERAVERWALTUNG_FIELDS;
       default: return [];
     }
   }, []);
@@ -212,15 +212,15 @@ export default function AdminPage() {
 
   const getServiceMethods = useCallback((entity: EntityKey) => {
     switch (entity) {
-      case 'webkamera_verwaltung': return {
-        create: (fields: any) => LivingAppsService.createWebkameraVerwaltungEntry(fields),
-        update: (id: string, fields: any) => LivingAppsService.updateWebkameraVerwaltungEntry(id, fields),
-        remove: (id: string) => LivingAppsService.deleteWebkameraVerwaltungEntry(id),
-      };
       case 'bilderfassung': return {
         create: (fields: any) => LivingAppsService.createBilderfassungEntry(fields),
         update: (id: string, fields: any) => LivingAppsService.updateBilderfassungEntry(id, fields),
         remove: (id: string) => LivingAppsService.deleteBilderfassungEntry(id),
+      };
+      case 'webkamera_verwaltung': return {
+        create: (fields: any) => LivingAppsService.createWebkameraVerwaltungEntry(fields),
+        update: (id: string, fields: any) => LivingAppsService.updateWebkameraVerwaltungEntry(id, fields),
+        remove: (id: string) => LivingAppsService.deleteWebkameraVerwaltungEntry(id),
       };
       default: return null;
     }
@@ -549,16 +549,6 @@ export default function AdminPage() {
         </Table>
       </div>
 
-      {(createEntity === 'webkamera_verwaltung' || dialogState?.entity === 'webkamera_verwaltung') && (
-        <WebkameraVerwaltungDialog
-          open={createEntity === 'webkamera_verwaltung' || dialogState?.entity === 'webkamera_verwaltung'}
-          onClose={() => { setCreateEntity(null); setDialogState(null); }}
-          onSubmit={dialogState?.entity === 'webkamera_verwaltung' ? handleUpdate : (fields: any) => handleCreate('webkamera_verwaltung', fields)}
-          defaultValues={dialogState?.entity === 'webkamera_verwaltung' ? dialogState.record?.fields : undefined}
-          enablePhotoScan={AI_PHOTO_SCAN['WebkameraVerwaltung']}
-          enablePhotoLocation={AI_PHOTO_LOCATION['WebkameraVerwaltung']}
-        />
-      )}
       {(createEntity === 'bilderfassung' || dialogState?.entity === 'bilderfassung') && (
         <BilderfassungDialog
           open={createEntity === 'bilderfassung' || dialogState?.entity === 'bilderfassung'}
@@ -570,12 +560,14 @@ export default function AdminPage() {
           enablePhotoLocation={AI_PHOTO_LOCATION['Bilderfassung']}
         />
       )}
-      {viewState?.entity === 'webkamera_verwaltung' && (
-        <WebkameraVerwaltungViewDialog
-          open={viewState?.entity === 'webkamera_verwaltung'}
-          onClose={() => setViewState(null)}
-          record={viewState?.record}
-          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'webkamera_verwaltung', record: r }); }}
+      {(createEntity === 'webkamera_verwaltung' || dialogState?.entity === 'webkamera_verwaltung') && (
+        <WebkameraVerwaltungDialog
+          open={createEntity === 'webkamera_verwaltung' || dialogState?.entity === 'webkamera_verwaltung'}
+          onClose={() => { setCreateEntity(null); setDialogState(null); }}
+          onSubmit={dialogState?.entity === 'webkamera_verwaltung' ? handleUpdate : (fields: any) => handleCreate('webkamera_verwaltung', fields)}
+          defaultValues={dialogState?.entity === 'webkamera_verwaltung' ? dialogState.record?.fields : undefined}
+          enablePhotoScan={AI_PHOTO_SCAN['WebkameraVerwaltung']}
+          enablePhotoLocation={AI_PHOTO_LOCATION['WebkameraVerwaltung']}
         />
       )}
       {viewState?.entity === 'bilderfassung' && (
@@ -585,6 +577,14 @@ export default function AdminPage() {
           record={viewState?.record}
           onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'bilderfassung', record: r }); }}
           webkamera_verwaltungList={(data as any).webkameraVerwaltung ?? []}
+        />
+      )}
+      {viewState?.entity === 'webkamera_verwaltung' && (
+        <WebkameraVerwaltungViewDialog
+          open={viewState?.entity === 'webkamera_verwaltung'}
+          onClose={() => setViewState(null)}
+          record={viewState?.record}
+          onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'webkamera_verwaltung', record: r }); }}
         />
       )}
 

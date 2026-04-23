@@ -1,22 +1,22 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { WebkameraVerwaltung, Bilderfassung } from '@/types/app';
+import type { Bilderfassung, WebkameraVerwaltung } from '@/types/app';
 import { LivingAppsService } from '@/services/livingAppsService';
 
 export function useDashboardData() {
-  const [webkameraVerwaltung, setWebkameraVerwaltung] = useState<WebkameraVerwaltung[]>([]);
   const [bilderfassung, setBilderfassung] = useState<Bilderfassung[]>([]);
+  const [webkameraVerwaltung, setWebkameraVerwaltung] = useState<WebkameraVerwaltung[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchAll = useCallback(async () => {
     setError(null);
     try {
-      const [webkameraVerwaltungData, bilderfassungData] = await Promise.all([
-        LivingAppsService.getWebkameraVerwaltung(),
+      const [bilderfassungData, webkameraVerwaltungData] = await Promise.all([
         LivingAppsService.getBilderfassung(),
+        LivingAppsService.getWebkameraVerwaltung(),
       ]);
-      setWebkameraVerwaltung(webkameraVerwaltungData);
       setBilderfassung(bilderfassungData);
+      setWebkameraVerwaltung(webkameraVerwaltungData);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Fehler beim Laden der Daten'));
     } finally {
@@ -30,12 +30,12 @@ export function useDashboardData() {
   useEffect(() => {
     async function silentRefresh() {
       try {
-        const [webkameraVerwaltungData, bilderfassungData] = await Promise.all([
-          LivingAppsService.getWebkameraVerwaltung(),
+        const [bilderfassungData, webkameraVerwaltungData] = await Promise.all([
           LivingAppsService.getBilderfassung(),
+          LivingAppsService.getWebkameraVerwaltung(),
         ]);
-        setWebkameraVerwaltung(webkameraVerwaltungData);
         setBilderfassung(bilderfassungData);
+        setWebkameraVerwaltung(webkameraVerwaltungData);
       } catch {
         // silently ignore — stale data is better than no data
       }
@@ -51,5 +51,5 @@ export function useDashboardData() {
     return m;
   }, [webkameraVerwaltung]);
 
-  return { webkameraVerwaltung, setWebkameraVerwaltung, bilderfassung, setBilderfassung, loading, error, fetchAll, webkameraVerwaltungMap };
+  return { bilderfassung, setBilderfassung, webkameraVerwaltung, setWebkameraVerwaltung, loading, error, fetchAll, webkameraVerwaltungMap };
 }

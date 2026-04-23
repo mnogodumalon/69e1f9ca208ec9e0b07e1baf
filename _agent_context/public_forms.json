@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "forms": [
+    {
+      "entity": "bilderfassung",
+      "app_id": "69e1f9bc1913ab36ef161891",
+      "path": "/rest/apps/69e1f9bc1913ab36ef161891/records",
+      "allowed_fields": [
+        "aufnahmezeitpunkt",
+        "bild_notiz",
+        "bild_qualitaet",
+        "ki_prompt",
+        "ki_auswertung",
+        "ki_messwert",
+        "ki_kriterium_erfuellt"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Bilderfassung — Formular"
+    },
+    {
+      "entity": "webkamera_verwaltung",
+      "app_id": "69e1f9b9e099184b4f891185",
+      "path": "/rest/apps/69e1f9b9e099184b4f891185/records",
+      "allowed_fields": [
+        "kamera_name",
+        "kamera_standort",
+        "kamera_url",
+        "kamera_geo",
+        "kamera_beschreibung",
+        "kamera_status"
+      ],
+      "pow": true,
+      "pow_difficulty": 50000,
+      "title": "Webkamera-Verwaltung — Formular"
+    }
+  ]
+}

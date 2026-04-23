@@ -1,3 +1,0 @@
-- Webkamera-Verwaltung (webkamera_verwaltung): kamera_name[string/text], kamera_standort[string/text], kamera_url[string/url], kamera_geo[geo], kamera_beschreibung[string/textarea], kamera_status[lookup/radio]
-- Bilderfassung (bilderfassung): kamera_referenz[applookup/select], aufnahmezeitpunkt[date/datetimeminute], bild_datei[file], bild_notiz[string/textarea], bild_qualitaet[lookup/radio], ki_prompt[string/textarea], ki_auswertung[string/textarea], ki_messwert[number], ki_kriterium_erfuellt[bool]
-  → kamera_referenz links to app_id 69e1f9b9e099184b4f891185

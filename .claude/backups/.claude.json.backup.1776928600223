@@ -459,9 +459,5 @@
   "penguinModeOrgEnabled": true,
   "clientDataCache": null,
   "additionalModelOptionsCache": [],
-  "additionalModelCostsCache": {},
-  "metricsStatusCache": {
-    "enabled": true,
-    "timestamp": 1776928600222
-  }
+  "additionalModelCostsCache": {}
 }
