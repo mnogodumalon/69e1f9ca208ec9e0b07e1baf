@@ -56,32 +56,28 @@ export default function PublicFormWebkameraVerwaltung() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const captchaRef = useRef<HTMLElement | null>(null);
   const [locating, setLocating] = useState(false);
   const [geoFromPhoto, setGeoFromPhoto] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
-  const captchaRef = useRef<HTMLElement | null>(null);
 
   function geoLocate(fieldKey: string) {
     if (!navigator.geolocation) return;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setFields(f => ({
-          ...f,
-          [fieldKey]: { lat: pos.coords.latitude, long: pos.coords.longitude, info: `${pos.coords.latitude.toFixed(5)}, ${pos.coords.longitude.toFixed(5)}` },
-        }));
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setFields(f => ({ ...f, [fieldKey]: { ...(f[fieldKey] ?? {}), lat, long: lng, info: `${lat.toFixed(5)}, ${lng.toFixed(5)}` } }));
         setGeoFromPhoto(false);
         setLocating(false);
       },
-      () => setLocating(false),
+      () => { setLocating(false); }
     );
   }
 
   function handleMapMove(fieldKey: string, lat: number, lng: number) {
-    setFields(f => ({
-      ...f,
-      [fieldKey]: { ...(f[fieldKey] as any ?? {}), lat, long: lng, info: `${lat.toFixed(5)}, ${lng.toFixed(5)}` },
-    }));
+    setFields(f => ({ ...f, [fieldKey]: { ...(f[fieldKey] ?? {}), lat, long: lng, info: `${lat.toFixed(5)}, ${lng.toFixed(5)}` } }));
   }
 
   // Load the ALTCHA web component script once per page.
