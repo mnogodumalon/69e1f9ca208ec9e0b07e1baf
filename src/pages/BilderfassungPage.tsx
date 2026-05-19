@@ -33,19 +33,19 @@ export default function BilderfassungPage() {
   const [viewingRecord, setViewingRecord] = useState<Bilderfassung | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [webkamera_verwaltungList, setWebkameraVerwaltungList] = useState<WebkameraVerwaltung[]>([]);
+  const [webkameraVerwaltungList, setWebkameraVerwaltungList] = useState<WebkameraVerwaltung[]>([]);
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [mainData, webkamera_verwaltungData] = await Promise.all([
+      const [mainData, webkameraVerwaltungData] = await Promise.all([
         LivingAppsService.getBilderfassung(),
         LivingAppsService.getWebkameraVerwaltung(),
       ]);
       setRecords(mainData);
-      setWebkameraVerwaltungList(webkamera_verwaltungData);
+      setWebkameraVerwaltungList(webkameraVerwaltungData);
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,7 @@ export default function BilderfassungPage() {
   function getWebkameraVerwaltungDisplayName(url?: unknown) {
     if (!url) return '—';
     const id = extractRecordId(url);
-    return webkamera_verwaltungList.find(r => r.record_id === id)?.fields.kamera_name ?? '—';
+    return webkameraVerwaltungList.find(r => r.record_id === id)?.fields.kamera_name ?? '—';
   }
 
   const filtered = records.filter(r => {
@@ -140,6 +140,12 @@ export default function BilderfassungPage() {
         <Table className="[&_tbody_td]:px-6 [&_tbody_td]:py-2 [&_tbody_td]:text-base [&_tbody_td]:font-medium [&_tbody_tr:first-child_td]:pt-6 [&_tbody_tr:last-child_td]:pb-10">
           <TableHeader className="bg-secondary">
             <TableRow className="border-b border-input">
+              <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('referenzbild_datei')}>
+                <span className="inline-flex items-center gap-1">
+                  Referenzbild
+                  {sortKey === 'referenzbild_datei' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
+                </span>
+              </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_referenz')}>
                 <span className="inline-flex items-center gap-1">
                   Webkamera
@@ -200,6 +206,7 @@ export default function BilderfassungPage() {
           <TableBody>
             {sortRecords(filtered).map(record => (
               <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+                <TableCell>{record.fields.referenzbild_datei ? <div className="relative h-8 w-8 rounded bg-muted overflow-hidden"><div className="absolute inset-0 flex items-center justify-center"><IconFileText size={14} className="text-muted-foreground" /></div><img src={record.fields.referenzbild_datei} alt="" className="relative h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div> : '—'}</TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getWebkameraVerwaltungDisplayName(record.fields.kamera_referenz)}</span></TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.aufnahmezeitpunkt)}</TableCell>
                 <TableCell>{record.fields.bild_datei ? <div className="relative h-8 w-8 rounded bg-muted overflow-hidden"><div className="absolute inset-0 flex items-center justify-center"><IconFileText size={14} className="text-muted-foreground" /></div><img src={record.fields.bild_datei} alt="" className="relative h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div> : '—'}</TableCell>
@@ -223,7 +230,7 @@ export default function BilderfassungPage() {
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-16 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-16 text-muted-foreground">
                   {search ? 'Keine Ergebnisse gefunden.' : 'Noch keine Bilderfassung. Jetzt hinzufügen!'}
                 </TableCell>
               </TableRow>
@@ -237,7 +244,7 @@ export default function BilderfassungPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
-        webkamera_verwaltungList={webkamera_verwaltungList}
+        webkameraVerwaltungList={webkameraVerwaltungList}
         enablePhotoScan={AI_PHOTO_SCAN['Bilderfassung']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Bilderfassung']}
       />
@@ -255,7 +262,7 @@ export default function BilderfassungPage() {
         onClose={() => setViewingRecord(null)}
         record={viewingRecord}
         onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-        webkamera_verwaltungList={webkamera_verwaltungList}
+        webkameraVerwaltungList={webkameraVerwaltungList}
       />
     </PageShell>
   );

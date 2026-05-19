@@ -3,10 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { IconChevronDown, IconCrosshair, IconLoader2 } from '@tabler/icons-react';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
 import { lookupKey } from '@/lib/formatters';
@@ -61,23 +57,22 @@ export default function PublicFormWebkameraVerwaltung() {
   const [geoFromPhoto, setGeoFromPhoto] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
 
-  function geoLocate(fieldKey: string) {
+  function geoLocate(field: string) {
     if (!navigator.geolocation) return;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setFields(f => ({ ...f, [fieldKey]: { ...(f[fieldKey] ?? {}), lat, long: lng, info: `${lat.toFixed(5)}, ${lng.toFixed(5)}` } }));
+      pos => {
+        const { latitude: lat, longitude: long } = pos.coords;
+        setFields(f => ({ ...f, [field]: { ...(f[field] ?? {}), lat, long, info: `${lat.toFixed(6)}, ${long.toFixed(6)}` } }));
         setGeoFromPhoto(false);
         setLocating(false);
       },
-      () => { setLocating(false); }
+      () => setLocating(false)
     );
   }
 
-  function handleMapMove(fieldKey: string, lat: number, lng: number) {
-    setFields(f => ({ ...f, [fieldKey]: { ...(f[fieldKey] ?? {}), lat, long: lng, info: `${lat.toFixed(5)}, ${lng.toFixed(5)}` } }));
+  function handleMapMove(field: string, lat: number, lng: number) {
+    setFields(f => ({ ...f, [field]: { ...(f[field] ?? {}), lat, long: lng, info: `${lat.toFixed(6)}, ${lng.toFixed(6)}` } }));
   }
 
   // Load the ALTCHA web component script once per page.
@@ -155,6 +150,7 @@ export default function PublicFormWebkameraVerwaltung() {
             <Label htmlFor="kamera_name">Kameraname</Label>
             <Input
               id="kamera_name"
+              placeholder=""
               value={fields.kamera_name ?? ''}
               onChange={e => setFields(f => ({ ...f, kamera_name: e.target.value }))}
             />
@@ -163,6 +159,7 @@ export default function PublicFormWebkameraVerwaltung() {
             <Label htmlFor="kamera_standort">Standortbeschreibung</Label>
             <Input
               id="kamera_standort"
+              placeholder=""
               value={fields.kamera_standort ?? ''}
               onChange={e => setFields(f => ({ ...f, kamera_standort: e.target.value }))}
             />
@@ -231,6 +228,7 @@ export default function PublicFormWebkameraVerwaltung() {
             <Label htmlFor="kamera_beschreibung">Beschreibung</Label>
             <Textarea
               id="kamera_beschreibung"
+              placeholder=""
               value={fields.kamera_beschreibung ?? ''}
               onChange={e => setFields(f => ({ ...f, kamera_beschreibung: e.target.value }))}
               rows={3}
@@ -238,18 +236,47 @@ export default function PublicFormWebkameraVerwaltung() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="kamera_status">Status</Label>
-            <Select
-              value={lookupKey(fields.kamera_status) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, kamera_status: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="kamera_status"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="aktiv">Aktiv</SelectItem>
-                <SelectItem value="inaktiv">Inaktiv</SelectItem>
-                <SelectItem value="wartung">In Wartung</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.kamera_status) === 'aktiv'}
+                onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'aktiv' ? undefined : 'aktiv') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.kamera_status) === 'aktiv'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Aktiv
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.kamera_status) === 'inaktiv'}
+                onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'inaktiv' ? undefined : 'inaktiv') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.kamera_status) === 'inaktiv'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Inaktiv
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.kamera_status) === 'wartung'}
+                onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'wartung' ? undefined : 'wartung') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.kamera_status) === 'wartung'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                In Wartung
+              </button>
+            </div>
           </div>
 
           <altcha-widget

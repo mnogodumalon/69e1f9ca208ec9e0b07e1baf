@@ -2,7 +2,7 @@ import * as Sentry from '@sentry/react';
 
 const DSN = "https://a0a6a937e751b39ecf7303042f45cd6e@sentry.livinglogic.de/42";
 const ENVIRONMENT = "dashboard-69e1f9ca208ec9e0b07e1baf";
-const RELEASE = "0.0.112";
+const RELEASE = "0.0.131";
 const APPGROUP_ID = "69e1f9ca208ec9e0b07e1baf";
 
 if (DSN) {

@@ -8,6 +8,7 @@ export interface Bilderfassung {
   createdat: string;
   updatedat: string | null;
   fields: {
+    referenzbild_datei?: string;
     kamera_referenz?: string; // applookup -> URL zu 'WebkameraVerwaltung' Record
     aufnahmezeitpunkt?: string; // Format: YYYY-MM-DD oder ISO String
     bild_datei?: string;
@@ -42,7 +43,7 @@ export const APP_IDS = {
 
 export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: string}[]>> = {
   'bilderfassung': {
-    bild_qualitaet: [{ key: "mittel", label: "Mittel" }, { key: "schlecht", label: "Schlecht" }, { key: "gut", label: "Gut" }],
+    bild_qualitaet: [{ key: "gut", label: "Gut" }, { key: "mittel", label: "Mittel" }, { key: "schlecht", label: "Schlecht" }],
   },
   'webkamera_verwaltung': {
     kamera_status: [{ key: "aktiv", label: "Aktiv" }, { key: "inaktiv", label: "Inaktiv" }, { key: "wartung", label: "In Wartung" }],
@@ -51,6 +52,7 @@ export const LOOKUP_OPTIONS: Record<string, Record<string, {key: string, label: 
 
 export const FIELD_TYPES: Record<string, Record<string, string>> = {
   'bilderfassung': {
+    'referenzbild_datei': 'file',
     'kamera_referenz': 'applookup/select',
     'aufnahmezeitpunkt': 'date/datetimeminute',
     'bild_datei': 'file',

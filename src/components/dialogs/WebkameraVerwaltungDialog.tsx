@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { WebkameraVerwaltung } from '@/types/app';
 import { APP_IDS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, getUserProfile } from '@/services/livingAppsService';
@@ -9,13 +9,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { ComputedContext } from '@/config/form-enhancements/types';
+import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
+import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/WebkameraVerwaltung';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconArrowBigDownLinesFilled, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
 import { lookupKey } from '@/lib/formatters';
@@ -32,6 +31,7 @@ interface WebkameraVerwaltungDialogProps {
 export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValues, enablePhotoScan = true, enablePhotoLocation = true }: WebkameraVerwaltungDialogProps) {
   const [fields, setFields] = useState<Partial<WebkameraVerwaltung['fields']>>({});
   const [saving, setSaving] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -46,9 +46,41 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
   const [profileLoading, setProfileLoading] = useState(false);
   const [aiText, setAiText] = useState('');
 
+  // Computed-field plumbing. Pure no-op when formEnhancements.computed is {}.
+  // The number renderer uses computedValues only as a fallback when the user
+  // hasn't typed anything — clearing the input always restores the computation.
+  // computedContext exposes applookup list props so { kind: 'applookup', ... }
+  // operands can resolve to numeric fields on the target record.
+  const computedContext = useMemo<ComputedContext>(() => ({
+    lookupLists: {
+    },
+  }), []);
+  const computedValues = useMemo<Record<string, number | null>>(() => {
+    let out: Record<string, number | null> = {};
+    const entries = Object.entries(formEnhancements.computed);
+    for (let i = 0; i < 5; i++) {
+      const merged: Record<string, unknown> = { ...(fields as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(out)) {
+        if (v === null) continue;
+        const cur = merged[k];
+        if (cur === undefined || cur === null || cur === '') merged[k] = v;
+      }
+      const next: Record<string, number | null> = {};
+      let changed = false;
+      for (const [key, spec] of entries) {
+        const v = evalComputed(spec, merged, computedContext);
+        next[key] = v;
+        if (v !== out[key]) changed = true;
+      }
+      out = next;
+      if (!changed) break;
+    }
+    return out;
+  }, [fields, computedContext]);
+
   useEffect(() => {
     if (open) {
-      setFields(defaultValues ?? {});
+      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<WebkameraVerwaltung['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
@@ -76,7 +108,21 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     e.preventDefault();
     setSaving(true);
     try {
-      const clean = cleanFieldsForApi({ ...fields }, 'webkamera_verwaltung');
+      // Fill empty number slots from computed values; user-typed values always win.
+      // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
+      // (sub-agent invents `_netto`, `_bestellung_gesamtbetrag` etc. for the
+      // "Berechnungen" display) have no backend counterpart — writing them
+      // triggers a 422 from the Living-Apps API ("field does not exist").
+      const merged = { ...fields };
+      for (const [key, val] of Object.entries(computedValues)) {
+        if (val === null) continue;
+        if (!backendFieldSet.has(key)) continue;
+        const cur = (merged as Record<string, unknown>)[key];
+        if (cur === undefined || cur === null || cur === '') {
+          (merged as Record<string, unknown>)[key] = val;
+        }
+      }
+      const clean = cleanFieldsForApi(merged, 'webkamera_verwaltung');
       await onSubmit(clean as WebkameraVerwaltung['fields']);
       onClose();
     } finally {
@@ -212,22 +258,252 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
 
   const DIALOG_INTENT = defaultValues ? 'Webkamera-Verwaltung bearbeiten' : 'Webkamera-Verwaltung hinzufügen';
 
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{DIALOG_INTENT}</DialogTitle>
-        </DialogHeader>
-
-        {enablePhotoScan && (
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <IconSparkles className="h-4 w-4 text-primary" />
-                KI-Assistent
+  const fieldBlocks: Record<string, React.ReactNode> = {
+    'kamera_name': (
+      <div key="kamera_name" className="space-y-1.5">
+        <Label htmlFor="kamera_name">Kameraname</Label>
+        <Input
+          id="kamera_name"
+          placeholder=""
+          value={fields.kamera_name ?? ''}
+          onChange={e => setFields(f => ({ ...f, kamera_name: e.target.value }))}
+        />
+      </div>
+    ),
+    'kamera_standort': (
+      <div key="kamera_standort" className="space-y-1.5">
+        <Label htmlFor="kamera_standort">Standortbeschreibung</Label>
+        <Input
+          id="kamera_standort"
+          placeholder=""
+          value={fields.kamera_standort ?? ''}
+          onChange={e => setFields(f => ({ ...f, kamera_standort: e.target.value }))}
+        />
+      </div>
+    ),
+    'kamera_url': (
+      <div key="kamera_url" className="space-y-1.5">
+        <Label htmlFor="kamera_url">Stream-URL</Label>
+        <Input
+          id="kamera_url"
+          value={fields.kamera_url ?? ''}
+          onChange={e => setFields(f => ({ ...f, kamera_url: e.target.value }))}
+        />
+      </div>
+    ),
+    'kamera_geo': (
+      <div key="kamera_geo" className="space-y-1.5">
+        <Label htmlFor="kamera_geo">Geografischer Standort</Label>
+        <div className="space-y-3">
+          <Button type="button" variant="outline" className="w-full" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
+            {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
+            Aktuellen Standort verwenden
+          </Button>
+          {geoFromPhoto && fields.kamera_geo && (
+            <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
+          )}
+          {fields.kamera_geo?.info && (
+            <p className="text-sm text-muted-foreground break-words whitespace-normal">
+              {fields.kamera_geo.info}
+            </p>
+          )}
+          {fields.kamera_geo?.lat != null && fields.kamera_geo?.long != null && (
+            <GeoMapPicker
+              lat={fields.kamera_geo.lat}
+              lng={fields.kamera_geo.long}
+              onChange={(lat, lng) => handleMapMove("kamera_geo", lat, lng)}
+            />
+          )}
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
+            {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
+            <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
+          </button>
+          {showCoords && (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Breitengrad</Label>
+                <Input type="number" step="any"
+                  value={fields.kamera_geo?.lat ?? ''}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setFields(f => ({ ...f, kamera_geo: { ...(f.kamera_geo as any ?? {}), lat: v ? Number(v) : undefined } }));
+                  }}
+                />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+              <div>
+                <Label className="text-xs text-muted-foreground">Längengrad</Label>
+                <Input type="number" step="any"
+                  value={fields.kamera_geo?.long ?? ''}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setFields(f => ({ ...f, kamera_geo: { ...(f.kamera_geo as any ?? {}), long: v ? Number(v) : undefined } }));
+                  }}
+                />
+              </div>
             </div>
+          )}
+        </div>
+      </div>
+    ),
+    'kamera_beschreibung': (
+      <div key="kamera_beschreibung" className="space-y-1.5">
+        <Label htmlFor="kamera_beschreibung">Beschreibung</Label>
+        <Textarea
+          id="kamera_beschreibung"
+          placeholder=""
+          value={fields.kamera_beschreibung ?? ''}
+          onChange={e => setFields(f => ({ ...f, kamera_beschreibung: e.target.value }))}
+          rows={3}
+        />
+      </div>
+    ),
+    'kamera_status': (
+      <div key="kamera_status" className="space-y-1.5">
+        <Label htmlFor="kamera_status">Status</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.kamera_status) === 'aktiv'}
+            onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'aktiv' ? undefined : 'aktiv') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.kamera_status) === 'aktiv'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Aktiv
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.kamera_status) === 'inaktiv'}
+            onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'inaktiv' ? undefined : 'inaktiv') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.kamera_status) === 'inaktiv'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Inaktiv
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.kamera_status) === 'wartung'}
+            onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'wartung' ? undefined : 'wartung') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.kamera_status) === 'wartung'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            In Wartung
+          </button>
+        </div>
+      </div>
+    ),
+  };
+  const orderedFields = applyFieldOrder(Object.keys(fieldBlocks), formEnhancements.fieldOrder);
+  const orderedFieldsKey = orderedFields.map((it) => typeof it === 'string' ? it : it.row.join('+')).join(',');
+
+  // Render-Modell für Computed-Felder:
+  //
+  //   • BACKEND-FELDER mit computed-Eintrag (z.B. gesamtpreis bei einer
+  //     Katzenpension) bleiben als normales Eingabe-Feld stehen. Der Number-
+  //     Input nutzt den computed-Wert als Vorschlag, der User kann jederzeit
+  //     überschreiben (clearing → restore computed).
+  //   • VIRTUELLE computed-Keys (Eintrag in formEnhancements.computed, ABER
+  //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
+  //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
+  //     Inline-Hint unter dem letzten beitragenden Input.
+  const FIELD_LABELS: Record<string, string> = {"kamera_name": "Kameraname", "kamera_standort": "Standortbeschreibung", "kamera_url": "Stream-URL", "kamera_geo": "Geografischer Standort", "kamera_beschreibung": "Beschreibung", "kamera_status": "Status"};
+  const CURRENCY_KEYS = new Set<string>([]);
+  // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
+  // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird
+  // beim Render-Walk gefiltert auf die in der computed-Formel tatsächlich
+  // referenzierten lookupKeys (siehe applookupRefs unten).
+  const APPLOOKUP_LABELS: Record<string, Record<string, string>> = {};
+  const inputFields = useMemo(() => flattenFieldOrder(orderedFields), [orderedFieldsKey]);
+  const backendFieldSet = useMemo(() => new Set(inputFields), [inputFields.join(',')]);
+  const virtualComputed = useMemo(
+    () => Object.fromEntries(
+      Object.entries(formEnhancements.computed).filter(([k]) => !backendFieldSet.has(k)),
+    ),
+    [backendFieldSet],
+  );
+  const virtualFormEnhancements = useMemo(
+    () => ({ ...formEnhancements, computed: virtualComputed }),
+    [virtualComputed],
+  );
+  const computedLayout = useMemo(
+    () => classifyComputed(virtualFormEnhancements, inputFields, computedDeps),
+    [virtualFormEnhancements, inputFields.join(',')],
+  );
+  // Applookup-Referenzen: pro ownKey (Lookup-Feld im Form) die Liste der
+  // lookupKeys, die in irgendeiner computed-Formel referenziert werden.
+  // MODUS-1: aus dem Spec-Tree extrahiert. MODUS-2: aus dem Build-Time-
+  // Export computedApplookupRefs (parse-formulas hat Regex-Pairs gesammelt).
+  // Pro (ownKey, lookupKey)-Paar nur einmal; pro ownKey können aber mehrere
+  // lookupKeys gleichzeitig auftauchen (z.B. einzelpreis UND karten10_preis
+  // beim Yoga-Kurs), und alle werden separat als Inline-Hint gerendert.
+  const applookupRefs = useMemo(
+    () => mergeApplookupRefs(
+      extractApplookupRefs(formEnhancements.computed),
+      computedApplookupRefs,
+    ),
+    [],
+  );
+  function summaryLabel(k: string): string {
+    if (FIELD_LABELS[k]) return FIELD_LABELS[k];
+    // Leading underscore(s) als Virtual-Marker abstreifen; Unterstriche zu
+    // Leerzeichen, jedes Wort kapitalisieren. Umlaute kommen vom Sub-Agent
+    // direkt im Key (z. B. `_buchung_dauer_nächte`) — JS/TS/Vite unterstützen
+    // Unicode-Identifier nativ, daher keine ASCII-Transliteration nötig.
+    return k.replace(/^_+/, '')
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+  function formatSummaryValue(k: string, v: unknown): string {
+    if (v === undefined || v === null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
+    const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
+    if (looksLikeCurrency) {
+      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
+          <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
+          {enablePhotoScan && (
+            <button
+              type="button"
+              onClick={() => setAiOpen(o => !o)}
+              aria-expanded={aiOpen}
+              aria-controls="ai-fill-panel"
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+                aiOpen
+                  ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
+                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
+              }`}
+            >
+              <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
+              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </DialogHeader>
+        {enablePhotoScan && aiOpen && (
+          <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -392,121 +668,108 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
               </Button>
             )}
-            <div className="flex justify-center pt-1">
-              <IconArrowBigDownLinesFilled className="h-8 w-8 text-muted-foreground/30" />
-            </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="kamera_name">Kameraname</Label>
-            <Input
-              id="kamera_name"
-              value={fields.kamera_name ?? ''}
-              onChange={e => setFields(f => ({ ...f, kamera_name: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="kamera_standort">Standortbeschreibung</Label>
-            <Input
-              id="kamera_standort"
-              value={fields.kamera_standort ?? ''}
-              onChange={e => setFields(f => ({ ...f, kamera_standort: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="kamera_url">Stream-URL</Label>
-            <Input
-              id="kamera_url"
-              value={fields.kamera_url ?? ''}
-              onChange={e => setFields(f => ({ ...f, kamera_url: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="kamera_geo">Geografischer Standort</Label>
-            <div className="space-y-3">
-              <Button type="button" variant="outline" className="w-full" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
-                {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
-                Aktuellen Standort verwenden
-              </Button>
-              {geoFromPhoto && fields.kamera_geo && (
-                <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
-              )}
-              {fields.kamera_geo?.info && (
-                <p className="text-sm text-muted-foreground break-words whitespace-normal">
-                  {fields.kamera_geo.info}
-                </p>
-              )}
-              {fields.kamera_geo?.lat != null && fields.kamera_geo?.long != null && (
-                <GeoMapPicker
-                  lat={fields.kamera_geo.lat}
-                  lng={fields.kamera_geo.long}
-                  onChange={(lat, lng) => handleMapMove("kamera_geo", lat, lng)}
-                />
-              )}
-              <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
-                {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
-                <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
-              </button>
-              {showCoords && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Breitengrad</Label>
-                    <Input type="number" step="any"
-                      value={fields.kamera_geo?.lat ?? ''}
-                      onChange={e => {
-                        const v = e.target.value;
-                        setFields(f => ({ ...f, kamera_geo: { ...(f.kamera_geo as any ?? {}), lat: v ? Number(v) : undefined } }));
-                      }}
-                    />
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
+            {(() => {
+              const renderField = (k: string) => {
+                const inlineHints = computedLayout.anchors[k] ?? [];
+                const refs = applookupRefs[k] ?? [];
+                return (
+                  <div key={k} className="space-y-1.5 min-w-0">
+                    {fieldBlocks[k]}
+                    {refs.map(({ lookupKey }) => {
+                      // Show the live numeric value the formula will pull from
+                      // the selected lookup target (e.g. "Monatspreis: 34,90 €"
+                      // under the Tarif combobox). Hidden while no lookup is
+                      // selected or the target field is non-numeric.
+                      const v = resolveApplookupRef(k, lookupKey, fields as Record<string, unknown>, computedContext);
+                      if (v === null) return null;
+                      const lbl = APPLOOKUP_LABELS[k]?.[lookupKey] ?? lookupKey;
+                      const text = formatSummaryValue(lookupKey, v);
+                      return (
+                        <div key={`alh-${k}-${lookupKey}`} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{lbl}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                    {inlineHints.map((cKey) => {
+                      const v = computedValues[cKey];
+                      const text = formatSummaryValue(cKey, v);
+                      if (text === '—') return null;
+                      return (
+                        <div key={cKey} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{summaryLabel(cKey)}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Längengrad</Label>
-                    <Input type="number" step="any"
-                      value={fields.kamera_geo?.long ?? ''}
-                      onChange={e => {
-                        const v = e.target.value;
-                        setFields(f => ({ ...f, kamera_geo: { ...(f.kamera_geo as any ?? {}), long: v ? Number(v) : undefined } }));
-                      }}
-                    />
+                );
+              };
+              return orderedFields.map((item, idx) => {
+                if (typeof item === 'string') return renderField(item);
+                const cols = item.cols ?? `repeat(${item.row.length}, minmax(0, 1fr))`;
+                return (
+                  <div key={`row-${idx}`} className="grid gap-3" style={{ gridTemplateColumns: cols }}>
+                    {item.row.map(renderField)}
                   </div>
-                </div>
-              )}
-            </div>
+                );
+              });
+            })()}
+            {(computedLayout.aggregates.length > 0 || computedLayout.finalTotal) && (
+              <div className="mt-6 pt-4 border-t border-border space-y-1.5">
+                {computedLayout.aggregates.length > 0 && (
+                  <dl className="space-y-1.5 pb-2">
+                    {computedLayout.aggregates.map((k) => {
+                      const userVal = (fields as Record<string, unknown>)[k];
+                      const computed = computedValues[k];
+                      const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                      return (
+                        <div key={k} className="flex justify-between items-baseline gap-3">
+                          <dt className="text-sm text-muted-foreground truncate">{summaryLabel(k)}</dt>
+                          <dd className="text-sm font-medium tabular-nums whitespace-nowrap">{formatSummaryValue(k, v)}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                )}
+                {computedLayout.finalTotal && (() => {
+                  const k = computedLayout.finalTotal;
+                  const userVal = (fields as Record<string, unknown>)[k];
+                  const computed = computedValues[k];
+                  const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                  // Innere Border nur wenn aggregates existieren — sonst hätten wir
+                  // zwei direkt aufeinanderfolgende Striche (Outer + Inner) mit nur
+                  // einer Aggregat-Zeile dazwischen → zu viel visuelles Rauschen.
+                  const sep = computedLayout.aggregates.length > 0 ? 'pt-3 border-t border-border' : 'pt-1';
+                  return (
+                    <div className={`flex justify-between items-baseline gap-3 ${sep}`}>
+                      <span className="text-base font-semibold text-foreground">{summaryLabel(k)}</span>
+                      <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground">{formatSummaryValue(k, v)}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="kamera_beschreibung">Beschreibung</Label>
-            <Textarea
-              id="kamera_beschreibung"
-              value={fields.kamera_beschreibung ?? ''}
-              onChange={e => setFields(f => ({ ...f, kamera_beschreibung: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="kamera_status">Status</Label>
-            <Select
-              value={lookupKey(fields.kamera_status) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, kamera_status: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="kamera_status"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="aktiv">Aktiv</SelectItem>
-                <SelectItem value="inaktiv">Inaktiv</SelectItem>
-                <SelectItem value="wartung">In Wartung</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              disabled={saving}
+            >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

@@ -21,14 +21,14 @@ interface BilderfassungViewDialogProps {
   onClose: () => void;
   record: Bilderfassung | null;
   onEdit: (record: Bilderfassung) => void;
-  webkamera_verwaltungList: WebkameraVerwaltung[];
+  webkameraVerwaltungList: WebkameraVerwaltung[];
 }
 
-export function BilderfassungViewDialog({ open, onClose, record, onEdit, webkamera_verwaltungList }: BilderfassungViewDialogProps) {
+export function BilderfassungViewDialog({ open, onClose, record, onEdit, webkameraVerwaltungList }: BilderfassungViewDialogProps) {
   function getWebkameraVerwaltungDisplayName(url?: unknown) {
     if (!url) return '—';
     const id = extractRecordId(url);
-    return webkamera_verwaltungList.find(r => r.record_id === id)?.fields.kamera_name ?? '—';
+    return webkameraVerwaltungList.find(r => r.record_id === id)?.fields.kamera_name ?? '—';
   }
 
   if (!record) return null;
@@ -47,6 +47,14 @@ export function BilderfassungViewDialog({ open, onClose, record, onEdit, webkame
         </div>
 
         <div className="space-y-4">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Referenzbild</Label>
+            {record.fields.referenzbild_datei ? (
+              <div className="relative w-full rounded-lg bg-muted overflow-hidden border">
+                <img src={record.fields.referenzbild_datei} alt="" className="w-full h-auto object-contain" />
+              </div>
+            ) : <p className="text-sm text-muted-foreground">—</p>}
+          </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Webkamera</Label>
             <p className="text-sm">{getWebkameraVerwaltungDisplayName(record.fields.kamera_referenz)}</p>

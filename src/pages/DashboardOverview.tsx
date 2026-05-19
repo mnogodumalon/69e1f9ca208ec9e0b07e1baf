@@ -448,7 +448,7 @@ export default function DashboardOverview() {
             ? { kamera_referenz: createRecordUrl(APP_IDS.WEBKAMERA_VERWALTUNG, selectedKamera.record_id) }
             : undefined
         }
-        webkamera_verwaltungList={webkameraVerwaltung}
+        webkameraVerwaltungList={webkameraVerwaltung}
         enablePhotoScan={AI_PHOTO_SCAN['Bilderfassung']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Bilderfassung']}
       />

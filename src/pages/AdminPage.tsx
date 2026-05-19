@@ -33,11 +33,12 @@ function fmtDate(d?: string) {
 
 // Field metadata per entity for bulk edit and column filters
 const BILDERFASSUNG_FIELDS = [
+  { key: 'referenzbild_datei', label: 'Referenzbild', type: 'file' },
   { key: 'kamera_referenz', label: 'Webkamera', type: 'applookup/select', targetEntity: 'webkamera_verwaltung', targetAppId: 'WEBKAMERA_VERWALTUNG', displayField: 'kamera_name' },
   { key: 'aufnahmezeitpunkt', label: 'Aufnahmezeitpunkt', type: 'date/datetimeminute' },
   { key: 'bild_datei', label: 'Bild', type: 'file' },
   { key: 'bild_notiz', label: 'Notiz', type: 'string/textarea' },
-  { key: 'bild_qualitaet', label: 'Bildqualität', type: 'lookup/radio', options: [{ key: 'mittel', label: 'Mittel' }, { key: 'schlecht', label: 'Schlecht' }, { key: 'gut', label: 'Gut' }] },
+  { key: 'bild_qualitaet', label: 'Bildqualität', type: 'lookup/radio', options: [{ key: 'gut', label: 'Gut' }, { key: 'mittel', label: 'Mittel' }, { key: 'schlecht', label: 'Schlecht' }] },
   { key: 'ki_prompt', label: 'Prompt', type: 'string/textarea' },
   { key: 'ki_auswertung', label: 'KI-Auswertung', type: 'string/textarea' },
   { key: 'ki_messwert', label: 'Messwert', type: 'number' },
@@ -95,7 +96,7 @@ export default function AdminPage() {
     const lists: Record<string, any[]> = {};
     switch (entity) {
       case 'bilderfassung':
-        lists.webkamera_verwaltungList = (data as any).webkameraVerwaltung ?? [];
+        lists.webkameraVerwaltungList = (data as any).webkameraVerwaltung ?? [];
         break;
     }
     return lists;
@@ -108,7 +109,7 @@ export default function AdminPage() {
     const lists = getLookupLists(entity);
     void fieldKey; // ensure used for noUnusedParameters
     if (entity === 'bilderfassung' && fieldKey === 'kamera_referenz') {
-      const match = (lists.webkamera_verwaltungList ?? []).find((r: any) => r.record_id === id);
+      const match = (lists.webkameraVerwaltungList ?? []).find((r: any) => r.record_id === id);
       return match?.fields.kamera_name ?? '—';
     }
     return String(url);
@@ -555,7 +556,7 @@ export default function AdminPage() {
           onClose={() => { setCreateEntity(null); setDialogState(null); }}
           onSubmit={dialogState?.entity === 'bilderfassung' ? handleUpdate : (fields: any) => handleCreate('bilderfassung', fields)}
           defaultValues={dialogState?.entity === 'bilderfassung' ? dialogState.record?.fields : undefined}
-          webkamera_verwaltungList={(data as any).webkameraVerwaltung ?? []}
+          webkameraVerwaltungList={(data as any).webkameraVerwaltung ?? []}
           enablePhotoScan={AI_PHOTO_SCAN['Bilderfassung']}
           enablePhotoLocation={AI_PHOTO_LOCATION['Bilderfassung']}
         />
@@ -576,7 +577,7 @@ export default function AdminPage() {
           onClose={() => setViewState(null)}
           record={viewState?.record}
           onEdit={(r: any) => { setViewState(null); setDialogState({ entity: 'bilderfassung', record: r }); }}
-          webkamera_verwaltungList={(data as any).webkameraVerwaltung ?? []}
+          webkameraVerwaltungList={(data as any).webkameraVerwaltung ?? []}
         />
       )}
       {viewState?.entity === 'webkamera_verwaltung' && (

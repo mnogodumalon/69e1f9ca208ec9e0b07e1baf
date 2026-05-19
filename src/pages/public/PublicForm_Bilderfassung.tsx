@@ -3,11 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/DatePicker';
 import { lookupKey } from '@/lib/formatters';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
@@ -130,18 +127,19 @@ export default function PublicFormBilderfassung() {
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
             <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt</Label>
-            <Input
+            <DatePicker
               id="aufnahmezeitpunkt"
-              type="datetime-local"
-              step="60"
-              value={fields.aufnahmezeitpunkt ?? ''}
-              onChange={e => setFields(f => ({ ...f, aufnahmezeitpunkt: e.target.value }))}
+              placeholder=""
+              mode="datetime"
+              value={fields.aufnahmezeitpunkt ?? null}
+              onChange={v => setFields(f => ({ ...f, aufnahmezeitpunkt: v ?? undefined }))}
             />
           </div>
           <div className="space-y-2">
             <Label htmlFor="bild_notiz">Notiz</Label>
             <Textarea
               id="bild_notiz"
+              placeholder=""
               value={fields.bild_notiz ?? ''}
               onChange={e => setFields(f => ({ ...f, bild_notiz: e.target.value }))}
               rows={3}
@@ -149,23 +147,53 @@ export default function PublicFormBilderfassung() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="bild_qualitaet">Bildqualität</Label>
-            <Select
-              value={lookupKey(fields.bild_qualitaet) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, bild_qualitaet: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="bild_qualitaet"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="mittel">Mittel</SelectItem>
-                <SelectItem value="schlecht">Schlecht</SelectItem>
-                <SelectItem value="gut">Gut</SelectItem>
-              </SelectContent>
-            </Select>
+            <div role="radiogroup" className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.bild_qualitaet) === 'gut'}
+                onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'gut' ? undefined : 'gut') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.bild_qualitaet) === 'gut'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Gut
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.bild_qualitaet) === 'mittel'}
+                onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'mittel' ? undefined : 'mittel') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.bild_qualitaet) === 'mittel'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Mittel
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={lookupKey(fields.bild_qualitaet) === 'schlecht'}
+                onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'schlecht' ? undefined : 'schlecht') as any }))}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  lookupKey(fields.bild_qualitaet) === 'schlecht'
+                    ? 'bg-foreground text-background border-foreground'
+                    : 'bg-background text-foreground border-input hover:bg-accent'
+                }`}
+              >
+                Schlecht
+              </button>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="ki_prompt">Prompt</Label>
             <Textarea
               id="ki_prompt"
+              placeholder=""
               value={fields.ki_prompt ?? ''}
               onChange={e => setFields(f => ({ ...f, ki_prompt: e.target.value }))}
               rows={3}
@@ -175,6 +203,7 @@ export default function PublicFormBilderfassung() {
             <Label htmlFor="ki_auswertung">KI-Auswertung</Label>
             <Textarea
               id="ki_auswertung"
+              placeholder=""
               value={fields.ki_auswertung ?? ''}
               onChange={e => setFields(f => ({ ...f, ki_auswertung: e.target.value }))}
               rows={3}
@@ -185,8 +214,11 @@ export default function PublicFormBilderfassung() {
             <Input
               id="ki_messwert"
               type="number"
+              step="any"
+              min={0}
+              placeholder=""
               value={fields.ki_messwert ?? ''}
-              onChange={e => setFields(f => ({ ...f, ki_messwert: e.target.value ? Number(e.target.value) : undefined }))}
+              onChange={e => { const n = e.target.value ? Math.max(0, Number(e.target.value)) : undefined; setFields(f => ({ ...f, ki_messwert: n })); }}
             />
           </div>
           <div className="space-y-2">

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Bilderfassung, WebkameraVerwaltung } from '@/types/app';
 import { APP_IDS } from '@/types/app';
-import { extractRecordId, createRecordUrl, cleanFieldsForApi, uploadFile, getUserProfile } from '@/services/livingAppsService';
+import { extractRecordId, createRecordUrl, cleanFieldsForApi, uploadFile, getUserProfile, LivingAppsService } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
   DialogTitle, DialogFooter,
@@ -9,13 +9,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import type { ComputedContext } from '@/config/form-enhancements/types';
+import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
+import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Bilderfassung';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Select, SelectContent, SelectItem,
-  SelectTrigger, SelectValue,
-} from '@/components/ui/select';
+import { Combobox } from '@/components/Combobox';
+import { WebkameraVerwaltungDialog } from '@/components/dialogs/WebkameraVerwaltungDialog';
+import { DatePicker } from '@/components/DatePicker';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconArrowBigDownLinesFilled, IconCamera, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
@@ -24,14 +26,32 @@ interface BilderfassungDialogProps {
   onClose: () => void;
   onSubmit: (fields: Bilderfassung['fields']) => Promise<void>;
   defaultValues?: Bilderfassung['fields'];
-  webkamera_verwaltungList: WebkameraVerwaltung[];
+  webkameraVerwaltungList: WebkameraVerwaltung[];
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
-export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, webkamera_verwaltungList, enablePhotoScan = true, enablePhotoLocation = true }: BilderfassungDialogProps) {
+export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, webkameraVerwaltungList, enablePhotoScan = true, enablePhotoLocation = true }: BilderfassungDialogProps) {
   const [fields, setFields] = useState<Partial<Bilderfassung['fields']>>({});
   const [saving, setSaving] = useState(false);
+  // Inline-Create state for "WebkameraVerwaltung" target. The dropdown's
+  // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
+  // record to the local `extraWebkameraVerwaltung` list, and select it in
+  // the originating Combobox via the captured `createWebkameraVerwaltungField`.
+  const [createWebkameraVerwaltungOpen, setCreateWebkameraVerwaltungOpen] = useState(false);
+  const [createWebkameraVerwaltungInitial, setCreateWebkameraVerwaltungInitial] = useState('');
+  const [createWebkameraVerwaltungField, setCreateWebkameraVerwaltungField] = useState<string>('');
+  const [extraWebkameraVerwaltung, setExtraWebkameraVerwaltung] = useState< WebkameraVerwaltung[]>([]);
+  const webkameraVerwaltungListAll = useMemo(
+    () => [...webkameraVerwaltungList, ...extraWebkameraVerwaltung],
+    [webkameraVerwaltungList, extraWebkameraVerwaltung],
+  );
+  function openCreateWebkameraVerwaltung(fieldKey: string, q: string) {
+    setCreateWebkameraVerwaltungField(fieldKey);
+    setCreateWebkameraVerwaltungInitial(q);
+    setCreateWebkameraVerwaltungOpen(true);
+  }
+  const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -46,9 +66,42 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
   const [profileLoading, setProfileLoading] = useState(false);
   const [aiText, setAiText] = useState('');
 
+  // Computed-field plumbing. Pure no-op when formEnhancements.computed is {}.
+  // The number renderer uses computedValues only as a fallback when the user
+  // hasn't typed anything — clearing the input always restores the computation.
+  // computedContext exposes applookup list props so { kind: 'applookup', ... }
+  // operands can resolve to numeric fields on the target record.
+  const computedContext = useMemo<ComputedContext>(() => ({
+    lookupLists: {
+      'kamera_referenz': webkameraVerwaltungList,
+    },
+  }), [webkameraVerwaltungList, ]);
+  const computedValues = useMemo<Record<string, number | null>>(() => {
+    let out: Record<string, number | null> = {};
+    const entries = Object.entries(formEnhancements.computed);
+    for (let i = 0; i < 5; i++) {
+      const merged: Record<string, unknown> = { ...(fields as Record<string, unknown>) };
+      for (const [k, v] of Object.entries(out)) {
+        if (v === null) continue;
+        const cur = merged[k];
+        if (cur === undefined || cur === null || cur === '') merged[k] = v;
+      }
+      const next: Record<string, number | null> = {};
+      let changed = false;
+      for (const [key, spec] of entries) {
+        const v = evalComputed(spec, merged, computedContext);
+        next[key] = v;
+        if (v !== out[key]) changed = true;
+      }
+      out = next;
+      if (!changed) break;
+    }
+    return out;
+  }, [fields, computedContext]);
+
   useEffect(() => {
     if (open) {
-      setFields(defaultValues ?? {});
+      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Bilderfassung['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
@@ -75,7 +128,21 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
     e.preventDefault();
     setSaving(true);
     try {
-      const clean = cleanFieldsForApi({ ...fields }, 'bilderfassung');
+      // Fill empty number slots from computed values; user-typed values always win.
+      // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
+      // (sub-agent invents `_netto`, `_bestellung_gesamtbetrag` etc. for the
+      // "Berechnungen" display) have no backend counterpart — writing them
+      // triggers a 422 from the Living-Apps API ("field does not exist").
+      const merged = { ...fields };
+      for (const [key, val] of Object.entries(computedValues)) {
+        if (val === null) continue;
+        if (!backendFieldSet.has(key)) continue;
+        const cur = (merged as Record<string, unknown>)[key];
+        if (cur === undefined || cur === null || cur === '') {
+          (merged as Record<string, unknown>)[key] = val;
+        }
+      }
+      const clean = cleanFieldsForApi(merged, 'bilderfassung');
       await onSubmit(clean as Bilderfassung['fields']);
       onClose();
     } finally {
@@ -110,7 +177,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
       if (parts.length) {
         contextParts.push(`<photo-metadata>\nThe following metadata was extracted from the photo\'s EXIF data:\n${parts.join('\n')}\n</photo-metadata>`);
       }
-      contextParts.push(`<available-records field="kamera_referenz" entity="Webkamera-Verwaltung">\n${JSON.stringify(webkamera_verwaltungList.map(r => ({ record_id: r.record_id, ...r.fields })), null, 2)}\n</available-records>`);
+      contextParts.push(`<available-records field="kamera_referenz" entity="Webkamera-Verwaltung">\n${JSON.stringify(webkameraVerwaltungList.map(r => ({ record_id: r.record_id, ...r.fields })), null, 2)}\n</available-records>`);
       if (usePersonalInfo) {
         try {
           const profile = await getUserProfile();
@@ -120,7 +187,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
         }
       }
       const photoContext = contextParts.length ? contextParts.join('\n') : undefined;
-      const schema = `{\n  "kamera_referenz": string | null, // Display name from Webkamera-Verwaltung (see <available-records>)\n  "aufnahmezeitpunkt": string | null, // YYYY-MM-DDTHH:MM\n  "bild_notiz": string | null, // Notiz\n  "bild_qualitaet": LookupValue | null, // Bildqualität (select one key: "mittel" | "schlecht" | "gut") mapping: mittel=Mittel, schlecht=Schlecht, gut=Gut\n  "ki_prompt": string | null, // Prompt\n  "ki_auswertung": string | null, // KI-Auswertung\n  "ki_messwert": number | null, // Messwert\n  "ki_kriterium_erfuellt": boolean | null, // Kriterium erfüllt\n}`;
+      const schema = `{\n  "kamera_referenz": string | null, // Display name from Webkamera-Verwaltung (see <available-records>)\n  "aufnahmezeitpunkt": string | null, // YYYY-MM-DDTHH:MM\n  "bild_notiz": string | null, // Notiz\n  "bild_qualitaet": LookupValue | null, // Bildqualität (select one key: "gut" | "mittel" | "schlecht") mapping: gut=Gut, mittel=Mittel, schlecht=Schlecht\n  "ki_prompt": string | null, // Prompt\n  "ki_auswertung": string | null, // KI-Auswertung\n  "ki_messwert": number | null, // Messwert\n  "ki_kriterium_erfuellt": boolean | null, // Kriterium erfüllt\n}`;
       const raw = await extractFromInput<Record<string, unknown>>(schema, {
         dataUri: uri,
         userText: aiText.trim() || undefined,
@@ -140,7 +207,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
         }
         const kamera_referenzName = raw['kamera_referenz'] as string | null;
         if (kamera_referenzName) {
-          const kamera_referenzMatch = webkamera_verwaltungList.find(r => matchName(kamera_referenzName!, [String(r.fields.kamera_name ?? '')]));
+          const kamera_referenzMatch = webkameraVerwaltungList.find(r => matchName(kamera_referenzName!, [String(r.fields.kamera_name ?? '')]));
           if (kamera_referenzMatch) merged['kamera_referenz'] = createRecordUrl(APP_IDS.WEBKAMERA_VERWALTUNG, kamera_referenzMatch.record_id);
         }
         return merged as Partial<Bilderfassung['fields']>;
@@ -150,6 +217,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
         try {
           const blob = dataUriToBlob(uri!);
           const fileUrl = await uploadFile(blob, file.name);
+          setFields(prev => ({ ...prev, referenzbild_datei: fileUrl }));
           setFields(prev => ({ ...prev, bild_datei: fileUrl }));
         } catch (uploadErr) {
           console.error('File upload failed:', uploadErr);
@@ -196,22 +264,388 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
 
   const DIALOG_INTENT = defaultValues ? 'Bilderfassung bearbeiten' : 'Bilderfassung hinzufügen';
 
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{DIALOG_INTENT}</DialogTitle>
-        </DialogHeader>
-
-        {enablePhotoScan && (
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-1.5 font-medium">
-                <IconSparkles className="h-4 w-4 text-primary" />
-                KI-Assistent
+  const fieldBlocks: Record<string, React.ReactNode> = {
+    'referenzbild_datei': (
+      <div key="referenzbild_datei" className="space-y-1.5">
+        <Label htmlFor="referenzbild_datei">Referenzbild</Label>
+        {fields.referenzbild_datei ? (
+          <div className="flex items-center gap-3 rounded-lg border p-2">
+            <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <IconFileText size={20} className="text-muted-foreground" />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+              <img
+                src={fields.referenzbild_datei}
+                alt=""
+                className="relative h-full w-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
             </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm truncate text-foreground">{fields.referenzbild_datei.split("/").pop()}</p>
+              <div className="flex gap-2 mt-1">
+                <label
+                  className="text-xs text-primary hover:underline cursor-pointer"
+                >
+                  Ändern
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const fileUrl = await uploadFile(file, file.name);
+                        setFields(f => ({ ...f, referenzbild_datei: fileUrl }));
+                      } catch (err) { console.error('Upload failed:', err); }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setFields(f => ({ ...f, referenzbild_datei: undefined }))}
+                >
+                  Entfernen
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <label
+            className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+          >
+            <IconUpload size={20} className="text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const fileUrl = await uploadFile(file, file.name);
+                  setFields(f => ({ ...f, referenzbild_datei: fileUrl }));
+                } catch (err) { console.error('Upload failed:', err); }
+              }}
+            />
+          </label>
+        )}
+      </div>
+    ),
+    'kamera_referenz': (
+      <div key="kamera_referenz" className="space-y-1.5">
+        <Label htmlFor="kamera_referenz">Webkamera</Label>
+        <Combobox
+          id="kamera_referenz"
+          placeholder=""
+          items={webkameraVerwaltungListAll.map(r => ({
+            id: r.record_id,
+            label: String(r.fields.kamera_name ?? r.record_id),
+          }))}
+          value={extractRecordId(fields.kamera_referenz)}
+          onChange={id => setFields(f => ({ ...f, kamera_referenz: id ? createRecordUrl(APP_IDS.WEBKAMERA_VERWALTUNG, id) : undefined }))}
+          searchPlaceholder="Suchen…"
+          emptyText="Kein Treffer"
+          onCreateNew={(q) => openCreateWebkameraVerwaltung("kamera_referenz", q)}
+          createLabel="Neu in Webkamera-Verwaltung"
+        />
+      </div>
+    ),
+    'aufnahmezeitpunkt': (
+      <div key="aufnahmezeitpunkt" className="space-y-1.5">
+        <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt</Label>
+        <DatePicker
+          id="aufnahmezeitpunkt"
+          placeholder=""
+          mode="datetime"
+          value={fields.aufnahmezeitpunkt ?? null}
+          onChange={v => setFields(f => ({ ...f, aufnahmezeitpunkt: v ?? undefined }))}
+        />
+      </div>
+    ),
+    'bild_datei': (
+      <div key="bild_datei" className="space-y-1.5">
+        <Label htmlFor="bild_datei">Bild</Label>
+        {fields.bild_datei ? (
+          <div className="flex items-center gap-3 rounded-lg border p-2">
+            <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <IconFileText size={20} className="text-muted-foreground" />
+              </div>
+              <img
+                src={fields.bild_datei}
+                alt=""
+                className="relative h-full w-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm truncate text-foreground">{fields.bild_datei.split("/").pop()}</p>
+              <div className="flex gap-2 mt-1">
+                <label
+                  className="text-xs text-primary hover:underline cursor-pointer"
+                >
+                  Ändern
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const fileUrl = await uploadFile(file, file.name);
+                        setFields(f => ({ ...f, bild_datei: fileUrl }));
+                      } catch (err) { console.error('Upload failed:', err); }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setFields(f => ({ ...f, bild_datei: undefined }))}
+                >
+                  Entfernen
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <label
+            className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+          >
+            <IconUpload size={20} className="text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const fileUrl = await uploadFile(file, file.name);
+                  setFields(f => ({ ...f, bild_datei: fileUrl }));
+                } catch (err) { console.error('Upload failed:', err); }
+              }}
+            />
+          </label>
+        )}
+      </div>
+    ),
+    'bild_notiz': (
+      <div key="bild_notiz" className="space-y-1.5">
+        <Label htmlFor="bild_notiz">Notiz</Label>
+        <Textarea
+          id="bild_notiz"
+          placeholder=""
+          value={fields.bild_notiz ?? ''}
+          onChange={e => setFields(f => ({ ...f, bild_notiz: e.target.value }))}
+          rows={3}
+        />
+      </div>
+    ),
+    'bild_qualitaet': (
+      <div key="bild_qualitaet" className="space-y-1.5">
+        <Label htmlFor="bild_qualitaet">Bildqualität</Label>
+        <div role="radiogroup" className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.bild_qualitaet) === 'gut'}
+            onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'gut' ? undefined : 'gut') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.bild_qualitaet) === 'gut'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Gut
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.bild_qualitaet) === 'mittel'}
+            onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'mittel' ? undefined : 'mittel') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.bild_qualitaet) === 'mittel'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Mittel
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={lookupKey(fields.bild_qualitaet) === 'schlecht'}
+            onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'schlecht' ? undefined : 'schlecht') as any }))}
+            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+              lookupKey(fields.bild_qualitaet) === 'schlecht'
+                ? 'bg-foreground text-background border-foreground'
+                : 'bg-background text-foreground border-input hover:bg-accent'
+            }`}
+          >
+            Schlecht
+          </button>
+        </div>
+      </div>
+    ),
+    'ki_prompt': (
+      <div key="ki_prompt" className="space-y-1.5">
+        <Label htmlFor="ki_prompt">Prompt</Label>
+        <Textarea
+          id="ki_prompt"
+          placeholder=""
+          value={fields.ki_prompt ?? ''}
+          onChange={e => setFields(f => ({ ...f, ki_prompt: e.target.value }))}
+          rows={3}
+        />
+      </div>
+    ),
+    'ki_auswertung': (
+      <div key="ki_auswertung" className="space-y-1.5">
+        <Label htmlFor="ki_auswertung">KI-Auswertung</Label>
+        <Textarea
+          id="ki_auswertung"
+          placeholder=""
+          value={fields.ki_auswertung ?? ''}
+          onChange={e => setFields(f => ({ ...f, ki_auswertung: e.target.value }))}
+          rows={3}
+        />
+      </div>
+    ),
+    'ki_messwert': (
+      <div key="ki_messwert" className="space-y-1.5">
+        <Label htmlFor="ki_messwert">Messwert</Label>
+        <Input
+          id="ki_messwert"
+          type="number"
+          step="any"
+          {...numberInputProps(formEnhancements, 'ki_messwert')}
+          placeholder=""
+          value={fields.ki_messwert !== undefined ? fields.ki_messwert : (computedValues['ki_messwert'] ?? '')}
+          onChange={e => setFields(f => ({ ...f, ki_messwert: clampNumberValue(formEnhancements, 'ki_messwert', e.target.value) }))}
+        />
+      </div>
+    ),
+    'ki_kriterium_erfuellt': (
+      <div key="ki_kriterium_erfuellt" className="space-y-1.5">
+        <Label htmlFor="ki_kriterium_erfuellt">Kriterium erfüllt</Label>
+        <div className="flex items-center gap-2 pt-1">
+          <Checkbox
+            id="ki_kriterium_erfuellt"
+            checked={!!fields.ki_kriterium_erfuellt}
+            onCheckedChange={(v) => setFields(f => ({ ...f, ki_kriterium_erfuellt: !!v }))}
+          />
+          <Label htmlFor="ki_kriterium_erfuellt" className="font-normal">Kriterium erfüllt</Label>
+        </div>
+      </div>
+    ),
+  };
+  const orderedFields = applyFieldOrder(Object.keys(fieldBlocks), formEnhancements.fieldOrder);
+  const orderedFieldsKey = orderedFields.map((it) => typeof it === 'string' ? it : it.row.join('+')).join(',');
+
+  // Render-Modell für Computed-Felder:
+  //
+  //   • BACKEND-FELDER mit computed-Eintrag (z.B. gesamtpreis bei einer
+  //     Katzenpension) bleiben als normales Eingabe-Feld stehen. Der Number-
+  //     Input nutzt den computed-Wert als Vorschlag, der User kann jederzeit
+  //     überschreiben (clearing → restore computed).
+  //   • VIRTUELLE computed-Keys (Eintrag in formEnhancements.computed, ABER
+  //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
+  //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
+  //     Inline-Hint unter dem letzten beitragenden Input.
+  const FIELD_LABELS: Record<string, string> = {"referenzbild_datei": "Referenzbild", "kamera_referenz": "Webkamera", "aufnahmezeitpunkt": "Aufnahmezeitpunkt", "bild_datei": "Bild", "bild_notiz": "Notiz", "bild_qualitaet": "Bildqualität", "ki_prompt": "Prompt", "ki_auswertung": "KI-Auswertung", "ki_messwert": "Messwert", "ki_kriterium_erfuellt": "Kriterium erfüllt"};
+  const CURRENCY_KEYS = new Set<string>([]);
+  // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
+  // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird
+  // beim Render-Walk gefiltert auf die in der computed-Formel tatsächlich
+  // referenzierten lookupKeys (siehe applookupRefs unten).
+  const APPLOOKUP_LABELS: Record<string, Record<string, string>> = {"kamera_referenz": {"kamera_name": "Kameraname", "kamera_standort": "Standortbeschreibung", "kamera_url": "Stream-URL", "kamera_geo": "Geografischer Standort", "kamera_beschreibung": "Beschreibung", "kamera_status": "Status"}};
+  const inputFields = useMemo(() => flattenFieldOrder(orderedFields), [orderedFieldsKey]);
+  const backendFieldSet = useMemo(() => new Set(inputFields), [inputFields.join(',')]);
+  const virtualComputed = useMemo(
+    () => Object.fromEntries(
+      Object.entries(formEnhancements.computed).filter(([k]) => !backendFieldSet.has(k)),
+    ),
+    [backendFieldSet],
+  );
+  const virtualFormEnhancements = useMemo(
+    () => ({ ...formEnhancements, computed: virtualComputed }),
+    [virtualComputed],
+  );
+  const computedLayout = useMemo(
+    () => classifyComputed(virtualFormEnhancements, inputFields, computedDeps),
+    [virtualFormEnhancements, inputFields.join(',')],
+  );
+  // Applookup-Referenzen: pro ownKey (Lookup-Feld im Form) die Liste der
+  // lookupKeys, die in irgendeiner computed-Formel referenziert werden.
+  // MODUS-1: aus dem Spec-Tree extrahiert. MODUS-2: aus dem Build-Time-
+  // Export computedApplookupRefs (parse-formulas hat Regex-Pairs gesammelt).
+  // Pro (ownKey, lookupKey)-Paar nur einmal; pro ownKey können aber mehrere
+  // lookupKeys gleichzeitig auftauchen (z.B. einzelpreis UND karten10_preis
+  // beim Yoga-Kurs), und alle werden separat als Inline-Hint gerendert.
+  const applookupRefs = useMemo(
+    () => mergeApplookupRefs(
+      extractApplookupRefs(formEnhancements.computed),
+      computedApplookupRefs,
+    ),
+    [],
+  );
+  function summaryLabel(k: string): string {
+    if (FIELD_LABELS[k]) return FIELD_LABELS[k];
+    // Leading underscore(s) als Virtual-Marker abstreifen; Unterstriche zu
+    // Leerzeichen, jedes Wort kapitalisieren. Umlaute kommen vom Sub-Agent
+    // direkt im Key (z. B. `_buchung_dauer_nächte`) — JS/TS/Vite unterstützen
+    // Unicode-Identifier nativ, daher keine ASCII-Transliteration nötig.
+    return k.replace(/^_+/, '')
+      .split('_')
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
+  function formatSummaryValue(k: string, v: unknown): string {
+    if (v === undefined || v === null || v === '' || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+    const n = typeof v === 'number' ? v : Number(v);
+    if (!Number.isFinite(n)) return String(v);
+    // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
+    const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
+    if (looksLikeCurrency) {
+      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+  }
+
+  return (
+    <>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+        <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
+          <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
+          {enablePhotoScan && (
+            <button
+              type="button"
+              onClick={() => setAiOpen(o => !o)}
+              aria-expanded={aiOpen}
+              aria-controls="ai-fill-panel"
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+                aiOpen
+                  ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
+                  : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
+              }`}
+            >
+              <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
+              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
+            </button>
+          )}
+        </DialogHeader>
+        {enablePhotoScan && aiOpen && (
+          <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
+            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -376,178 +810,127 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
                 <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
               </Button>
             )}
-            <div className="flex justify-center pt-1">
-              <IconArrowBigDownLinesFilled className="h-8 w-8 text-muted-foreground/30" />
-            </div>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="kamera_referenz">Webkamera</Label>
-            <Select
-              value={extractRecordId(fields.kamera_referenz) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, kamera_referenz: v === 'none' ? undefined : createRecordUrl(APP_IDS.WEBKAMERA_VERWALTUNG, v) }))}
-            >
-              <SelectTrigger id="kamera_referenz"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                {webkamera_verwaltungList.map(r => (
-                  <SelectItem key={r.record_id} value={r.record_id}>
-                    {r.fields.kamera_name ?? r.record_id}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt</Label>
-            <Input
-              id="aufnahmezeitpunkt"
-              type="datetime-local"
-              step="60"
-              value={fields.aufnahmezeitpunkt ?? ''}
-              onChange={e => setFields(f => ({ ...f, aufnahmezeitpunkt: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="bild_datei">Bild</Label>
-            {fields.bild_datei ? (
-              <div className="flex items-center gap-3 rounded-lg border p-2">
-                <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <IconFileText size={20} className="text-muted-foreground" />
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
+            {(() => {
+              const renderField = (k: string) => {
+                const inlineHints = computedLayout.anchors[k] ?? [];
+                const refs = applookupRefs[k] ?? [];
+                return (
+                  <div key={k} className="space-y-1.5 min-w-0">
+                    {fieldBlocks[k]}
+                    {refs.map(({ lookupKey }) => {
+                      // Show the live numeric value the formula will pull from
+                      // the selected lookup target (e.g. "Monatspreis: 34,90 €"
+                      // under the Tarif combobox). Hidden while no lookup is
+                      // selected or the target field is non-numeric.
+                      const v = resolveApplookupRef(k, lookupKey, fields as Record<string, unknown>, computedContext);
+                      if (v === null) return null;
+                      const lbl = APPLOOKUP_LABELS[k]?.[lookupKey] ?? lookupKey;
+                      const text = formatSummaryValue(lookupKey, v);
+                      return (
+                        <div key={`alh-${k}-${lookupKey}`} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{lbl}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
+                    {inlineHints.map((cKey) => {
+                      const v = computedValues[cKey];
+                      const text = formatSummaryValue(cKey, v);
+                      if (text === '—') return null;
+                      return (
+                        <div key={cKey} className="flex items-center gap-1.5 pl-3 text-xs text-muted-foreground">
+                          <span className="text-primary/70">→</span>
+                          <span>{summaryLabel(cKey)}</span>
+                          <span className="ml-auto font-medium tabular-nums text-foreground">{text}</span>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <img
-                    src={fields.bild_datei}
-                    alt=""
-                    className="relative h-full w-full object-cover"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate text-foreground">{fields.bild_datei.split("/").pop()}</p>
-                  <div className="flex gap-2 mt-1">
-                    <label
-                      className="text-xs text-primary hover:underline cursor-pointer"
-                    >
-                      Ändern
-                      <input
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          try {
-                            const fileUrl = await uploadFile(file, file.name);
-                            setFields(f => ({ ...f, bild_datei: fileUrl }));
-                          } catch (err) { console.error('Upload failed:', err); }
-                        }}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="text-xs text-muted-foreground hover:text-destructive"
-                      onClick={() => setFields(f => ({ ...f, bild_datei: undefined }))}
-                    >
-                      Entfernen
-                    </button>
+                );
+              };
+              return orderedFields.map((item, idx) => {
+                if (typeof item === 'string') return renderField(item);
+                const cols = item.cols ?? `repeat(${item.row.length}, minmax(0, 1fr))`;
+                return (
+                  <div key={`row-${idx}`} className="grid gap-3" style={{ gridTemplateColumns: cols }}>
+                    {item.row.map(renderField)}
                   </div>
-                </div>
+                );
+              });
+            })()}
+            {(computedLayout.aggregates.length > 0 || computedLayout.finalTotal) && (
+              <div className="mt-6 pt-4 border-t border-border space-y-1.5">
+                {computedLayout.aggregates.length > 0 && (
+                  <dl className="space-y-1.5 pb-2">
+                    {computedLayout.aggregates.map((k) => {
+                      const userVal = (fields as Record<string, unknown>)[k];
+                      const computed = computedValues[k];
+                      const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                      return (
+                        <div key={k} className="flex justify-between items-baseline gap-3">
+                          <dt className="text-sm text-muted-foreground truncate">{summaryLabel(k)}</dt>
+                          <dd className="text-sm font-medium tabular-nums whitespace-nowrap">{formatSummaryValue(k, v)}</dd>
+                        </div>
+                      );
+                    })}
+                  </dl>
+                )}
+                {computedLayout.finalTotal && (() => {
+                  const k = computedLayout.finalTotal;
+                  const userVal = (fields as Record<string, unknown>)[k];
+                  const computed = computedValues[k];
+                  const v = userVal !== undefined && userVal !== null && userVal !== '' ? userVal : computed;
+                  // Innere Border nur wenn aggregates existieren — sonst hätten wir
+                  // zwei direkt aufeinanderfolgende Striche (Outer + Inner) mit nur
+                  // einer Aggregat-Zeile dazwischen → zu viel visuelles Rauschen.
+                  const sep = computedLayout.aggregates.length > 0 ? 'pt-3 border-t border-border' : 'pt-1';
+                  return (
+                    <div className={`flex justify-between items-baseline gap-3 ${sep}`}>
+                      <span className="text-base font-semibold text-foreground">{summaryLabel(k)}</span>
+                      <span className="text-lg font-bold tabular-nums whitespace-nowrap text-foreground">{formatSummaryValue(k, v)}</span>
+                    </div>
+                  );
+                })()}
               </div>
-            ) : (
-              <label
-                className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
-              >
-                <IconUpload size={20} className="text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Datei hochladen</span>
-                <input
-                  type="file"
-                  accept="image/*,.pdf"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    try {
-                      const fileUrl = await uploadFile(file, file.name);
-                      setFields(f => ({ ...f, bild_datei: fileUrl }));
-                    } catch (err) { console.error('Upload failed:', err); }
-                  }}
-                />
-              </label>
             )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="bild_notiz">Notiz</Label>
-            <Textarea
-              id="bild_notiz"
-              value={fields.bild_notiz ?? ''}
-              onChange={e => setFields(f => ({ ...f, bild_notiz: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="bild_qualitaet">Bildqualität</Label>
-            <Select
-              value={lookupKey(fields.bild_qualitaet) ?? 'none'}
-              onValueChange={v => setFields(f => ({ ...f, bild_qualitaet: v === 'none' ? undefined : v as any }))}
-            >
-              <SelectTrigger id="bild_qualitaet"><SelectValue placeholder="Auswählen..." /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">—</SelectItem>
-                <SelectItem value="mittel">Mittel</SelectItem>
-                <SelectItem value="schlecht">Schlecht</SelectItem>
-                <SelectItem value="gut">Gut</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ki_prompt">Prompt</Label>
-            <Textarea
-              id="ki_prompt"
-              value={fields.ki_prompt ?? ''}
-              onChange={e => setFields(f => ({ ...f, ki_prompt: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ki_auswertung">KI-Auswertung</Label>
-            <Textarea
-              id="ki_auswertung"
-              value={fields.ki_auswertung ?? ''}
-              onChange={e => setFields(f => ({ ...f, ki_auswertung: e.target.value }))}
-              rows={3}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ki_messwert">Messwert</Label>
-            <Input
-              id="ki_messwert"
-              type="number"
-              value={fields.ki_messwert ?? ''}
-              onChange={e => setFields(f => ({ ...f, ki_messwert: e.target.value ? Number(e.target.value) : undefined }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ki_kriterium_erfuellt">Kriterium erfüllt</Label>
-            <div className="flex items-center gap-2 pt-1">
-              <Checkbox
-                id="ki_kriterium_erfuellt"
-                checked={!!fields.ki_kriterium_erfuellt}
-                onCheckedChange={(v) => setFields(f => ({ ...f, ki_kriterium_erfuellt: !!v }))}
-              />
-              <Label htmlFor="ki_kriterium_erfuellt" className="font-normal">Kriterium erfüllt</Label>
-            </div>
-          </div>
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
             <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
-            <Button type="submit" disabled={saving}>
+            <Button
+              type="submit"
+              disabled={saving}
+            >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    {createWebkameraVerwaltungOpen && (
+      <WebkameraVerwaltungDialog
+        open={createWebkameraVerwaltungOpen}
+        onClose={() => setCreateWebkameraVerwaltungOpen(false)}
+        onSubmit={async (newFields) => {
+          const result = await LivingAppsService.createWebkameraVerwaltungEntry(newFields as any) as { id?: string };
+          if (result?.id) {
+            const newRec = { record_id: result.id, fields: newFields } as unknown as WebkameraVerwaltung;
+            setExtraWebkameraVerwaltung(prev => [...prev, newRec]);
+            const url = createRecordUrl(APP_IDS.WEBKAMERA_VERWALTUNG, result.id);
+            setFields(prev => ({ ...prev, [createWebkameraVerwaltungField]: url } as any));
+          }
+          setCreateWebkameraVerwaltungOpen(false);
+        }}
+        defaultValues={createWebkameraVerwaltungInitial
+          ? ({ kamera_name: createWebkameraVerwaltungInitial } as any)
+          : undefined}
+      />
+    )}
+    </>
   );
 }
