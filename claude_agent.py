@@ -148,14 +148,26 @@ from '@/services/livingAppsService'. Do NOT build custom API calls or service fu
 - NEVER use Bash for file operations — use Read/Write/Edit tools only.
 - Rules of Hooks: ALL hooks MUST be BEFORE any early returns (loading/error).
 - IMPORT HYGIENE: Only import what you use.
-- ALWAYS reuse pre-generated {Entity}Dialog from '@/components/dialogs/{Entity}Dialog' for record creation/editing.
+- NEVER use the pre-generated {Entity}Dialog components inside the intent UI. \
+They are the generic CRUD modals (every field, photo-scan, etc.) and break the wizard flow. \
+Each step must have its own inline UI tailored to that step's task — show only the fields relevant \
+for the user's current decision, use the most ergonomic input method (date-range picker, tile-style \
+multi-select with prices, live total card, search-as-you-type). Call LivingAppsService.create<X>Entry() \
+directly on submit with correctly formatted fields. See .claude/skills/intent-ui/SKILL.md section \
+"NEVER use the pre-generated {Entity}Dialog inside an intent UI" for examples.
 - TOUCH-FRIENDLY: NEVER hide buttons behind hover.
-- Follow .claude/skills/intent-ui/SKILL.md for design patterns.
+- MANDATORY FIRST STEP: Before writing any code, Read `.claude/skills/intent-ui/SKILL.md` \
+in full. It is the authoritative source for design patterns AND critical API write rules \
+(lookup keys, applookup URLs, multipleapplookup arrays). Skipping it produces wrong code.
 - Do NOT run npm run build — the orchestrator handles that.
 - Do NOT touch any other files — only create the file you were given.
 - DEEP-LINKING: Use useSearchParams to read ?step= parameter. Initialize the wizard step from the URL \
 param so the dashboard can link directly to specific steps (e.g., ?eventId=xxx&step=2 skips to step 2). \
 When the user navigates between steps, update the URL params to keep them in sync.
+- NAVIGATION OUT: Never link the user from an intent UI to a CRUD subpage \
+(`#/buchungen`, `#/kunden`, `#/katzen`, …). Allowed link targets are ONLY: `#/` (dashboard) \
+or `#/intents/<other-slug>` (follow-up intent). On success, offer "Neue Buchung anlegen" \
+(reset wizard) and "Zurück zum Dashboard" — not "Zur Buchungsübersicht".
 
 CRITICAL API RULE — lookup fields when writing:
 When READING, lookups are objects: { key: 'x', label: 'X' }.
@@ -163,6 +175,16 @@ When WRITING (create/update via LivingAppsService), send ONLY the plain key stri
   ❌ status: { key: 'eingeladen', label: 'Eingeladen' }  → 400 error
   ✅ status: 'eingeladen'                                 → works
 For multiplelookup, send string array: ['a', 'b'], NOT [{key,label}, ...].
+
+CRITICAL API RULE — multipleapplookup fields when writing:
+The API expects null or an ARRAY of full record URLs (string[]). NEVER join, stringify,
+or send a single URL where a list is expected.
+  ✅ extras: ids.map(id => createRecordUrl(APP_IDS.X, id))   // string[]
+  ✅ extras: urls.length > 0 ? urls : undefined
+  ❌ extras: urls.join(',')                → 422 "type none or list expected, not str"
+  ❌ extras: createRecordUrl(APP_IDS.X, oneId)   // singular URL when list expected
+  ❌ extras: JSON.stringify(urls)
+Rule: if the form-state is a Set<id> or id[], map to URLs first, then pass the ARRAY directly.
 """
 
 FORM_POLISH_PROMPT = """\
@@ -720,11 +742,13 @@ Props: items (id, title, subtitle, status, stats), onSelect
      * StatusBadge from '@/components/StatusBadge' — universal status badge. Props: statusKey, label
    - Tell it to import types, APP_IDS, LivingAppsService, extractRecordId, createRecordUrl from the scaffold
    - Remind: lookup fields when WRITING use plain string keys, NOT {key, label} objects
-   - CRITICAL: Tell it which {Entity}Dialog components exist and MUST be used for record creation. \
-List ALL available dialogs by name (e.g., "ArtikelDialog from '@/components/dialogs/ArtikelDialog'") \
-and their list props (e.g., "einkaufsgruppeList={einkaufsgruppe}"). \
-The intent builder MUST use these dialogs for creating new records — NEVER build inline forms. \
-Every step that involves selecting a record must ALSO show a "Neu erstellen" button opening the dialog.
+   - CRITICAL — do NOT use any pre-generated {Entity}Dialog inside the intent UI. \
+The {Entity}Dialog components are the generic CRUD forms with every field and a photo-scan modal — \
+they break the intent flow. The intent builder MUST build a task-tailored inline UI per step, \
+showing only the fields relevant for that step's decision and the most ergonomic input method \
+(date-range picker, tile-style multi-select, live total card, etc.). Submit calls \
+LivingAppsService.create<X>Entry() directly with correctly formatted fields (lookup = plain key string, \
+applookup = full URL via createRecordUrl, multipleapplookup = string[] of URLs).
 
 DO NOT dispatch 'dashboard_builder'.
 
@@ -838,10 +862,13 @@ Props: items (id, title, subtitle, status, stats), onSelect
         * StatusBadge from '@/components/StatusBadge' — universal status badge. Props: statusKey, label
       - Tell it to import types, APP_IDS, LivingAppsService, extractRecordId, createRecordUrl from the scaffold
       - Remind: lookup fields when WRITING use plain string keys, NOT {key, label} objects
-      - CRITICAL: Tell it which {Entity}Dialog components exist and MUST be used for record creation. \
-List ALL available dialogs by name and their list props. \
-The intent builder MUST use these dialogs — NEVER inline forms. \
-Every step that involves selecting a record must ALSO show a "Neu erstellen" button opening the dialog.
+      - CRITICAL — do NOT use any pre-generated {Entity}Dialog inside the intent UI. \
+The {Entity}Dialog components are the generic CRUD forms with every field and a photo-scan modal — \
+they break the intent flow. The intent builder MUST build a task-tailored inline UI per step, \
+showing only the fields relevant for that step's decision and the most ergonomic input method \
+(date-range picker, tile-style multi-select, live total card, etc.). Submit calls \
+LivingAppsService.create<X>Entry() directly with correctly formatted fields (lookup = plain key string, \
+applookup = full URL via createRecordUrl, multipleapplookup = string[] of URLs).
 
 3. After ALL subagents complete:
    - Edit src/App.tsx to:
