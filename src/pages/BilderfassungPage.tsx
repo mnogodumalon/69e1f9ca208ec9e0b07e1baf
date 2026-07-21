@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { LivingAppsService, extractRecordId, createRecordUrl } from '@/services/livingAppsService';
 import type { Bilderfassung, WebkameraVerwaltung } from '@/types/app';
 import { APP_IDS } from '@/types/app';
@@ -11,7 +12,6 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconTrash, IconPlus, IconSearch, IconArrowsUpDown, IconArrowUp, IconArrowDown, IconFileText } from '@tabler/icons-react';
 import { BilderfassungDialog } from '@/components/dialogs/BilderfassungDialog';
-import { BilderfassungViewDialog } from '@/components/dialogs/BilderfassungViewDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
@@ -24,13 +24,13 @@ function formatDate(d?: string) {
 }
 
 export default function BilderfassungPage() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<Bilderfassung[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Bilderfassung | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Bilderfassung | null>(null);
-  const [viewingRecord, setViewingRecord] = useState<Bilderfassung | null>(null);
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [webkameraVerwaltungList, setWebkameraVerwaltungList] = useState<WebkameraVerwaltung[]>([]);
@@ -140,6 +140,12 @@ export default function BilderfassungPage() {
         <Table className="[&_tbody_td]:px-6 [&_tbody_td]:py-2 [&_tbody_td]:text-base [&_tbody_td]:font-medium [&_tbody_tr:first-child_td]:pt-6 [&_tbody_tr:last-child_td]:pb-10">
           <TableHeader className="bg-secondary">
             <TableRow className="border-b border-input">
+              <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('schritt1')}>
+                <span className="inline-flex items-center gap-1">
+                  Schritt1
+                  {sortKey === 'schritt1' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
+                </span>
+              </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('referenzbild_datei')}>
                 <span className="inline-flex items-center gap-1">
                   Referenzbild
@@ -205,7 +211,8 @@ export default function BilderfassungPage() {
           </TableHeader>
           <TableBody>
             {sortRecords(filtered).map(record => (
-              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; setViewingRecord(record); }}>
+              <TableRow key={record.record_id} className="hover:bg-muted/50 transition-colors cursor-pointer" onClick={(e) => { if ((e.target as HTMLElement).closest('button, [role="checkbox"]')) return; navigate(`/bilderfassung/${record.record_id}`); }}>
+                <TableCell>{record.fields.schritt1 ? <div className="relative h-8 w-8 rounded bg-muted overflow-hidden"><div className="absolute inset-0 flex items-center justify-center"><IconFileText size={14} className="text-muted-foreground" /></div><img src={record.fields.schritt1} alt="" className="relative h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div> : '—'}</TableCell>
                 <TableCell>{record.fields.referenzbild_datei ? <div className="relative h-8 w-8 rounded bg-muted overflow-hidden"><div className="absolute inset-0 flex items-center justify-center"><IconFileText size={14} className="text-muted-foreground" /></div><img src={record.fields.referenzbild_datei} alt="" className="relative h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div> : '—'}</TableCell>
                 <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{getWebkameraVerwaltungDisplayName(record.fields.kamera_referenz)}</span></TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.aufnahmezeitpunkt)}</TableCell>
@@ -230,7 +237,7 @@ export default function BilderfassungPage() {
             ))}
             {filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-16 text-muted-foreground">
+                <TableCell colSpan={12} className="text-center py-16 text-muted-foreground">
                   {search ? 'Keine Ergebnisse gefunden.' : 'Noch keine Bilderfassung. Jetzt hinzufügen!'}
                 </TableCell>
               </TableRow>
@@ -244,6 +251,7 @@ export default function BilderfassungPage() {
         onClose={() => { setDialogOpen(false); setEditingRecord(null); }}
         onSubmit={editingRecord ? handleUpdate : handleCreate}
         defaultValues={editingRecord?.fields}
+        recordId={editingRecord?.record_id}
         webkameraVerwaltungList={webkameraVerwaltungList}
         enablePhotoScan={AI_PHOTO_SCAN['Bilderfassung']}
         enablePhotoLocation={AI_PHOTO_LOCATION['Bilderfassung']}
@@ -257,13 +265,6 @@ export default function BilderfassungPage() {
         description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
       />
 
-      <BilderfassungViewDialog
-        open={!!viewingRecord}
-        onClose={() => setViewingRecord(null)}
-        record={viewingRecord}
-        onEdit={(r) => { setViewingRecord(null); setEditingRecord(r); }}
-        webkameraVerwaltungList={webkameraVerwaltungList}
-      />
     </PageShell>
   );
 }

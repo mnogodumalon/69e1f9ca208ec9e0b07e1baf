@@ -5,6 +5,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { IconChevronDown, IconCrosshair, IconLoader2 } from '@tabler/icons-react';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { ensureUploadableImage } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
@@ -54,25 +56,37 @@ export default function PublicFormWebkameraVerwaltung() {
   const [error, setError] = useState<string | null>(null);
   const captchaRef = useRef<HTMLElement | null>(null);
   const [locating, setLocating] = useState(false);
-  const [geoFromPhoto, setGeoFromPhoto] = useState(false);
   const [showCoords, setShowCoords] = useState(false);
+  const [geoFromPhoto, setGeoFromPhoto] = useState(false);
+  const geoDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  function geoLocate(field: string) {
-    if (!navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        const { latitude: lat, longitude: long } = pos.coords;
-        setFields(f => ({ ...f, [field]: { ...(f[field] ?? {}), lat, long, info: `${lat.toFixed(6)}, ${long.toFixed(6)}` } }));
-        setGeoFromPhoto(false);
-        setLocating(false);
-      },
-      () => setLocating(false)
-    );
+  async function reverseGeocode(lat: number, lng: number): Promise<string> {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const data = await res.json();
+      return data.display_name ?? '';
+    } catch { return ''; }
   }
 
-  function handleMapMove(field: string, lat: number, lng: number) {
-    setFields(f => ({ ...f, [field]: { ...(f[field] ?? {}), lat, long: lng, info: `${lat.toFixed(6)}, ${lng.toFixed(6)}` } }));
+  async function geoLocate(fieldKey: string) {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const info = await reverseGeocode(latitude, longitude);
+      setFields(f => ({ ...f, [fieldKey]: { lat: latitude, long: longitude, info } as any }));
+      setGeoFromPhoto(false);
+      setLocating(false);
+    }, () => { setLocating(false); });
+  }
+
+  function handleMapMove(fieldKey: string, lat: number, lng: number) {
+    setFields(f => ({ ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), lat, long: lng } }));
+    clearTimeout(geoDebounceRef.current);
+    geoDebounceRef.current = setTimeout(async () => {
+      const info = await reverseGeocode(lat, lng);
+      setFields(f => ({ ...f, [fieldKey]: { ...((f as any)[fieldKey] ?? {}), info } }));
+    }, 600);
   }
 
   // Load the ALTCHA web component script once per page.
@@ -147,21 +161,23 @@ export default function PublicFormWebkameraVerwaltung() {
 
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
-            <Label htmlFor="kamera_name">Kameraname</Label>
+            <Label htmlFor="kamera_name">Kameraname *</Label>
             <Input
               id="kamera_name"
               placeholder=""
               value={fields.kamera_name ?? ''}
               onChange={e => setFields(f => ({ ...f, kamera_name: e.target.value }))}
+              required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_standort">Standortbeschreibung</Label>
+            <Label htmlFor="kamera_standort">Standortbeschreibung *</Label>
             <Input
               id="kamera_standort"
               placeholder=""
               value={fields.kamera_standort ?? ''}
               onChange={e => setFields(f => ({ ...f, kamera_standort: e.target.value }))}
+              required
             />
           </div>
           <div className="space-y-2">
@@ -175,10 +191,14 @@ export default function PublicFormWebkameraVerwaltung() {
           <div className="space-y-2">
             <Label htmlFor="kamera_geo">Geografischer Standort</Label>
             <div className="space-y-3">
-              <Button type="button" variant="outline" className="w-full" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
+              <Button type="button" variant="outline" className="w-full max-sm:h-11" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
                 {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
                 Aktuellen Standort verwenden
               </Button>
+              <AddressAutocomplete
+                placeholder="Adresse suchen und auswählen…"
+                onSelect={r => setFields(f => ({ ...f, kamera_geo: { lat: r.lat, long: r.long, info: r.label } as any }))}
+              />
               {geoFromPhoto && fields.kamera_geo && (
                 <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
               )}
@@ -194,7 +214,7 @@ export default function PublicFormWebkameraVerwaltung() {
                   onChange={(lat, lng) => handleMapMove("kamera_geo", lat, lng)}
                 />
               )}
-              <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
+              <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
                 {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
                 <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
               </button>
@@ -235,14 +255,14 @@ export default function PublicFormWebkameraVerwaltung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_status">Status</Label>
+            <Label htmlFor="kamera_status">Status *</Label>
             <div role="radiogroup" className="flex flex-wrap gap-1.5">
               <button
                 type="button"
                 role="radio"
                 aria-checked={lookupKey(fields.kamera_status) === 'aktiv'}
                 onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'aktiv' ? undefined : 'aktiv') as any }))}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   lookupKey(fields.kamera_status) === 'aktiv'
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-foreground border-input hover:bg-accent'
@@ -255,7 +275,7 @@ export default function PublicFormWebkameraVerwaltung() {
                 role="radio"
                 aria-checked={lookupKey(fields.kamera_status) === 'inaktiv'}
                 onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'inaktiv' ? undefined : 'inaktiv') as any }))}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   lookupKey(fields.kamera_status) === 'inaktiv'
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-foreground border-input hover:bg-accent'
@@ -268,7 +288,7 @@ export default function PublicFormWebkameraVerwaltung() {
                 role="radio"
                 aria-checked={lookupKey(fields.kamera_status) === 'wartung'}
                 onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'wartung' ? undefined : 'wartung') as any }))}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   lookupKey(fields.kamera_status) === 'wartung'
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-foreground border-input hover:bg-accent'

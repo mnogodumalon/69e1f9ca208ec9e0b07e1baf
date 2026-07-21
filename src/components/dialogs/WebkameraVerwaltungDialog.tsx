@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { WebkameraVerwaltung } from '@/types/app';
-import { APP_IDS } from '@/types/app';
+import type { WebkameraVerwaltung, LookupValue } from '@/types/app';
+import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, getUserProfile } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
@@ -12,25 +12,71 @@ import { Label } from '@/components/ui/label';
 import type { ComputedContext } from '@/config/form-enhancements/types';
 import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
 import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/WebkameraVerwaltung';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode } from '@/lib/ai';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { lookupKey } from '@/lib/formatters';
 
 interface WebkameraVerwaltungDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (fields: WebkameraVerwaltung['fields']) => Promise<void>;
-  defaultValues?: WebkameraVerwaltung['fields'];
+  /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
+   *  LookupValue object; applookup fields the bare record id or the full
+   *  record URL — the dialog normalizes both. */
+  defaultValues?: Omit<WebkameraVerwaltung['fields'], 'kamera_status'> & {
+    kamera_status?: LookupValue | string;
+  };
+  /** Record id when editing — enables the attachments section. Omit on create. */
+  recordId?: string;
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
-export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValues, enablePhotoScan = true, enablePhotoLocation = true }: WebkameraVerwaltungDialogProps) {
+// defaultValues are SHAPE-TOLERANT: the dialog resolves bare lookup keys via
+// its own options and bare record ids via the field's target app — consumers
+// never carry the LookupValue/record-URL shape in their head.
+const NORMALIZE_LOOKUPS: Record<string, readonly { key: string; label: string }[]> = {
+  kamera_status: LOOKUP_OPTIONS['webkamera_verwaltung']?.['kamera_status'] ?? [],
+};
+function normalizeDefaults(values: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+  for (const [k, opts] of Object.entries(NORMALIZE_LOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string') out[k] = opts.find(o => o.key === v) ?? { key: v, label: v };
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' ? opts.find(o => o.key === x) ?? { key: x, label: x } : x));
+  }
+  return out;
+}
+
+export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValues, recordId, enablePhotoScan = true, enablePhotoLocation = true }: WebkameraVerwaltungDialogProps) {
   const [fields, setFields] = useState<Partial<WebkameraVerwaltung['fields']>>({});
   const [saving, setSaving] = useState(false);
+  const normalizedDefaults = useMemo<Record<string, unknown> | undefined>(
+    () => (defaultValues ? normalizeDefaults(defaultValues as Record<string, unknown>) : undefined),
+    [defaultValues],
+  );
+  // Dirty-tracking: in edit-mode the Speichern button is disabled until the
+  // user actually changes something. JSON.stringify is good enough for our
+  // fields (plain values + LookupValue objects + string arrays).
+  const isDirty = useMemo(() => {
+    if (!normalizedDefaults) return true;  // create-mode: always allow submit
+    try {
+      return JSON.stringify(fields) !== JSON.stringify(normalizedDefaults);
+    } catch {
+      return true;
+    }
+  }, [fields, normalizedDefaults]);
+  const [showErrors, setShowErrors] = useState(false);
+  const REQUIRED_FIELDS = ['kamera_name', 'kamera_standort', 'kamera_status'] as const;
+  const missingRequired = REQUIRED_FIELDS.filter(k => {
+    const v = (fields as Record<string, unknown>)[k];
+    return v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  });
   const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
@@ -80,13 +126,14 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
 
   useEffect(() => {
     if (open) {
-      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<WebkameraVerwaltung['fields']>);
+      setFields(applyDefaults(normalizedDefaults ?? {}, formEnhancements.defaults) as Partial<WebkameraVerwaltung['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
+      setSubmitError(null);
       setGeoFromPhoto(false);
     }
-  }, [open, defaultValues]);
+  }, [open, normalizedDefaults]);
   useEffect(() => {
     try { localStorage.setItem('ai-use-personal-info', String(usePersonalInfo)); } catch {}
   }, [usePersonalInfo]);
@@ -104,9 +151,20 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     }
   }
 
+  // Submit errors surface IN the dialog (it is modal — a banner in the page
+  // body would be hidden behind it). A consumer onSubmit that THROWS (the
+  // documented "throw to prevent closing" validation pattern) lands here:
+  // the dialog stays open, nothing is saved, the message is visible.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (missingRequired.length > 0) {
+      setShowErrors(true);
+      return;
+    }
     setSaving(true);
+    setSubmitError(null);
     try {
       // Fill empty number slots from computed values; user-typed values always win.
       // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
@@ -125,6 +183,8 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
       const clean = cleanFieldsForApi(merged, 'webkamera_verwaltung');
       await onSubmit(clean as WebkameraVerwaltung['fields']);
       onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
     } finally {
       setSaving(false);
     }
@@ -261,24 +321,32 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
   const fieldBlocks: Record<string, React.ReactNode> = {
     'kamera_name': (
       <div key="kamera_name" className="space-y-1.5">
-        <Label htmlFor="kamera_name">Kameraname</Label>
+        <Label htmlFor="kamera_name">Kameraname <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="kamera_name"
           placeholder=""
           value={fields.kamera_name ?? ''}
           onChange={e => setFields(f => ({ ...f, kamera_name: e.target.value }))}
+          required
         />
+        {showErrors && !fields.kamera_name && (
+          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+        )}
       </div>
     ),
     'kamera_standort': (
       <div key="kamera_standort" className="space-y-1.5">
-        <Label htmlFor="kamera_standort">Standortbeschreibung</Label>
+        <Label htmlFor="kamera_standort">Standortbeschreibung <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="kamera_standort"
           placeholder=""
           value={fields.kamera_standort ?? ''}
           onChange={e => setFields(f => ({ ...f, kamera_standort: e.target.value }))}
+          required
         />
+        {showErrors && !fields.kamera_standort && (
+          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+        )}
       </div>
     ),
     'kamera_url': (
@@ -295,10 +363,14 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
       <div key="kamera_geo" className="space-y-1.5">
         <Label htmlFor="kamera_geo">Geografischer Standort</Label>
         <div className="space-y-3">
-          <Button type="button" variant="outline" className="w-full" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
+          <Button type="button" variant="outline" className="w-full max-sm:h-11" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
             {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
             Aktuellen Standort verwenden
           </Button>
+          <AddressAutocomplete
+            placeholder="Adresse suchen und auswählen…"
+            onSelect={r => setFields(f => ({ ...f, kamera_geo: { lat: r.lat, long: r.long, info: r.label } as any }))}
+          />
           {geoFromPhoto && fields.kamera_geo && (
             <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
           )}
@@ -314,7 +386,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
               onChange={(lat, lng) => handleMapMove("kamera_geo", lat, lng)}
             />
           )}
-          <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
+          <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
             {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
             <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
           </button>
@@ -359,14 +431,14 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     ),
     'kamera_status': (
       <div key="kamera_status" className="space-y-1.5">
-        <Label htmlFor="kamera_status">Status</Label>
+        <Label htmlFor="kamera_status">Status <span className="text-destructive" aria-hidden="true">*</span></Label>
         <div role="radiogroup" className="flex flex-wrap gap-1.5">
           <button
             type="button"
             role="radio"
             aria-checked={lookupKey(fields.kamera_status) === 'aktiv'}
             onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'aktiv' ? undefined : 'aktiv') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.kamera_status) === 'aktiv'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
@@ -379,7 +451,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             role="radio"
             aria-checked={lookupKey(fields.kamera_status) === 'inaktiv'}
             onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'inaktiv' ? undefined : 'inaktiv') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.kamera_status) === 'inaktiv'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
@@ -392,7 +464,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             role="radio"
             aria-checked={lookupKey(fields.kamera_status) === 'wartung'}
             onClick={() => setFields(f => ({ ...f, kamera_status: (lookupKey(f.kamera_status) === 'wartung' ? undefined : 'wartung') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.kamera_status) === 'wartung'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
@@ -401,6 +473,9 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             In Wartung
           </button>
         </div>
+        {showErrors && !fields.kamera_status && (
+          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+        )}
       </div>
     ),
   };
@@ -480,7 +555,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
   return (
     <>
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0 max-sm:[&>button]:size-10 max-sm:[&>button]:grid max-sm:[&>button]:place-items-center max-sm:[&>button]:rounded-full max-sm:[&>button]:border max-sm:[&>button]:border-input max-sm:[&>button]:bg-background max-sm:[&>button]:opacity-100 max-sm:[&>button>svg]:size-5">
         <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
           <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
           {enablePhotoScan && (
@@ -489,7 +564,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
               onClick={() => setAiOpen(o => !o)}
               aria-expanded={aiOpen}
               aria-controls="ai-fill-panel"
-              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 max-sm:py-2.5 max-sm:px-4 text-xs font-semibold transition-all mr-7 max-sm:mr-12 shadow-sm ${
                 aiOpen
                   ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
                   : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
@@ -671,7 +746,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0 max-sm:[&_input]:h-11">
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
             {(() => {
               const renderField = (k: string) => {
@@ -757,12 +832,30 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 })()}
               </div>
             )}
+            {showErrors && missingRequired.length > 0 && (
+              <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
+                <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Bitte fülle die markierten Pflichtfelder aus.
+              </p>
+            )}
+            {recordId && (
+              <div className="pt-2 border-t border-border">
+                <AttachmentsSection appId={APP_IDS.WEBKAMERA_VERWALTUNG} recordId={recordId} />
+              </div>
+            )}
           </div>
-          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+          {submitError && (
+            <div className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/10 px-6 py-2.5 text-sm text-destructive" role="alert">
+              <IconAlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="min-w-0 break-words">{submitError}</span>
+            </div>
+          )}
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2 max-sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">Abbrechen</Button>
             <Button
               type="submit"
-              disabled={saving}
+              className="max-sm:h-12 max-sm:flex-1 max-sm:text-base"
+              disabled={saving || !isDirty || (showErrors && missingRequired.length > 0)}
             >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>

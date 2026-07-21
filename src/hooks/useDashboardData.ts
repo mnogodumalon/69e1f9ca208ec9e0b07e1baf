@@ -1,22 +1,32 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import type { Bilderfassung, WebkameraVerwaltung } from '@/types/app';
+import type { WebkameraVerwaltung, Bilderfassung } from '@/types/app';
 import { LivingAppsService } from '@/services/livingAppsService';
 
+/** Dashboard data + the OPTIMISTIC-WRITE API.
+ *
+ *  The per-entity setters (`set<Entity>`) are exported for exactly one job:
+ *  optimistic updates on drag writes (onEventDrop / onEventResize /
+ *  onCardMove). Call the setter FIRST — the bar/card lands instantly — then
+ *  fire the PATCH in the background and call `fetchAll()` ONLY in the catch.
+ *  Never await the PATCH before updating state (the UI freezes for the full
+ *  round-trip on every drag) and never refetch after a successful write.
+ *  There is no other mechanism (no `__optimistic`, no `mutate`).
+ */
 export function useDashboardData() {
-  const [bilderfassung, setBilderfassung] = useState<Bilderfassung[]>([]);
   const [webkameraVerwaltung, setWebkameraVerwaltung] = useState<WebkameraVerwaltung[]>([]);
+  const [bilderfassung, setBilderfassung] = useState<Bilderfassung[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const fetchAll = useCallback(async () => {
     setError(null);
     try {
-      const [bilderfassungData, webkameraVerwaltungData] = await Promise.all([
-        LivingAppsService.getBilderfassung(),
+      const [webkameraVerwaltungData, bilderfassungData] = await Promise.all([
         LivingAppsService.getWebkameraVerwaltung(),
+        LivingAppsService.getBilderfassung(),
       ]);
-      setBilderfassung(bilderfassungData);
       setWebkameraVerwaltung(webkameraVerwaltungData);
+      setBilderfassung(bilderfassungData);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Fehler beim Laden der Daten'));
     } finally {
@@ -30,12 +40,12 @@ export function useDashboardData() {
   useEffect(() => {
     async function silentRefresh() {
       try {
-        const [bilderfassungData, webkameraVerwaltungData] = await Promise.all([
-          LivingAppsService.getBilderfassung(),
+        const [webkameraVerwaltungData, bilderfassungData] = await Promise.all([
           LivingAppsService.getWebkameraVerwaltung(),
+          LivingAppsService.getBilderfassung(),
         ]);
-        setBilderfassung(bilderfassungData);
         setWebkameraVerwaltung(webkameraVerwaltungData);
+        setBilderfassung(bilderfassungData);
       } catch {
         // silently ignore — stale data is better than no data
       }
@@ -51,5 +61,5 @@ export function useDashboardData() {
     return m;
   }, [webkameraVerwaltung]);
 
-  return { bilderfassung, setBilderfassung, webkameraVerwaltung, setWebkameraVerwaltung, loading, error, fetchAll, webkameraVerwaltungMap };
+  return { webkameraVerwaltung, setWebkameraVerwaltung, bilderfassung, setBilderfassung, loading, error, fetchAll, webkameraVerwaltungMap };
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import type { Bilderfassung, WebkameraVerwaltung } from '@/types/app';
-import { APP_IDS } from '@/types/app';
+import type { Bilderfassung, WebkameraVerwaltung, LookupValue } from '@/types/app';
+import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
 import { extractRecordId, createRecordUrl, cleanFieldsForApi, uploadFile, getUserProfile, LivingAppsService } from '@/services/livingAppsService';
 import {
   Dialog, DialogContent, DialogHeader,
@@ -12,12 +12,13 @@ import { Label } from '@/components/ui/label';
 import type { ComputedContext } from '@/config/form-enhancements/types';
 import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
 import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Bilderfassung';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Textarea } from '@/components/ui/textarea';
 import { Combobox } from '@/components/Combobox';
 import { WebkameraVerwaltungDialog } from '@/components/dialogs/WebkameraVerwaltungDialog';
 import { DatePicker } from '@/components/DatePicker';
 import { Checkbox } from '@/components/ui/checkbox';
-import { IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
+import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
@@ -25,15 +26,61 @@ interface BilderfassungDialogProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (fields: Bilderfassung['fields']) => Promise<void>;
-  defaultValues?: Bilderfassung['fields'];
+  /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
+   *  LookupValue object; applookup fields the bare record id or the full
+   *  record URL — the dialog normalizes both. */
+  defaultValues?: Omit<Bilderfassung['fields'], 'bild_qualitaet'> & {
+    bild_qualitaet?: LookupValue | string;
+  };
+  /** Record id when editing — enables the attachments section. Omit on create. */
+  recordId?: string;
   webkameraVerwaltungList: WebkameraVerwaltung[];
   enablePhotoScan?: boolean;
   enablePhotoLocation?: boolean;
 }
 
-export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, webkameraVerwaltungList, enablePhotoScan = true, enablePhotoLocation = true }: BilderfassungDialogProps) {
+// defaultValues are SHAPE-TOLERANT: the dialog resolves bare lookup keys via
+// its own options and bare record ids via the field's target app — consumers
+// never carry the LookupValue/record-URL shape in their head.
+const NORMALIZE_LOOKUPS: Record<string, readonly { key: string; label: string }[]> = {
+  bild_qualitaet: LOOKUP_OPTIONS['bilderfassung']?.['bild_qualitaet'] ?? [],
+};
+const NORMALIZE_APPLOOKUPS: Record<string, string> = {
+  kamera_referenz: APP_IDS.WEBKAMERA_VERWALTUNG,
+};
+function normalizeDefaults(values: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...values };
+  for (const [k, opts] of Object.entries(NORMALIZE_LOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string') out[k] = opts.find(o => o.key === v) ?? { key: v, label: v };
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' ? opts.find(o => o.key === x) ?? { key: x, label: x } : x));
+  }
+  for (const [k, appId] of Object.entries(NORMALIZE_APPLOOKUPS)) {
+    const v = out[k];
+    if (typeof v === 'string' && v !== '' && !v.startsWith('http')) out[k] = createRecordUrl(appId, v);
+    else if (Array.isArray(v)) out[k] = v.map(x => (typeof x === 'string' && x !== '' && !x.startsWith('http') ? createRecordUrl(appId, x) : x));
+  }
+  return out;
+}
+
+export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, recordId, webkameraVerwaltungList, enablePhotoScan = true, enablePhotoLocation = true }: BilderfassungDialogProps) {
   const [fields, setFields] = useState<Partial<Bilderfassung['fields']>>({});
   const [saving, setSaving] = useState(false);
+  const normalizedDefaults = useMemo<Record<string, unknown> | undefined>(
+    () => (defaultValues ? normalizeDefaults(defaultValues as Record<string, unknown>) : undefined),
+    [defaultValues],
+  );
+  // Dirty-tracking: in edit-mode the Speichern button is disabled until the
+  // user actually changes something. JSON.stringify is good enough for our
+  // fields (plain values + LookupValue objects + string arrays).
+  const isDirty = useMemo(() => {
+    if (!normalizedDefaults) return true;  // create-mode: always allow submit
+    try {
+      return JSON.stringify(fields) !== JSON.stringify(normalizedDefaults);
+    } catch {
+      return true;
+    }
+  }, [fields, normalizedDefaults]);
   // Inline-Create state for "WebkameraVerwaltung" target. The dropdown's
   // "+ Neuer …" option opens a sub-dialog; on submit we POST, add the new
   // record to the local `extraWebkameraVerwaltung` list, and select it in
@@ -51,6 +98,12 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
     setCreateWebkameraVerwaltungInitial(q);
     setCreateWebkameraVerwaltungOpen(true);
   }
+  const [showErrors, setShowErrors] = useState(false);
+  const REQUIRED_FIELDS = ['kamera_referenz', 'aufnahmezeitpunkt', 'bild_datei'] as const;
+  const missingRequired = REQUIRED_FIELDS.filter(k => {
+    const v = (fields as Record<string, unknown>)[k];
+    return v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  });
   const [aiOpen, setAiOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanSuccess, setScanSuccess] = useState(false);
@@ -101,12 +154,13 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
 
   useEffect(() => {
     if (open) {
-      setFields(applyDefaults((defaultValues ?? {}) as Record<string, unknown>, formEnhancements.defaults) as Partial<Bilderfassung['fields']>);
+      setFields(applyDefaults(normalizedDefaults ?? {}, formEnhancements.defaults) as Partial<Bilderfassung['fields']>);
       setPreview(null);
       setScanSuccess(false);
       setAiText('');
+      setSubmitError(null);
     }
-  }, [open, defaultValues]);
+  }, [open, normalizedDefaults]);
   useEffect(() => {
     try { localStorage.setItem('ai-use-personal-info', String(usePersonalInfo)); } catch {}
   }, [usePersonalInfo]);
@@ -124,9 +178,20 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
     }
   }
 
+  // Submit errors surface IN the dialog (it is modal — a banner in the page
+  // body would be hidden behind it). A consumer onSubmit that THROWS (the
+  // documented "throw to prevent closing" validation pattern) lands here:
+  // the dialog stays open, nothing is saved, the message is visible.
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (missingRequired.length > 0) {
+      setShowErrors(true);
+      return;
+    }
     setSaving(true);
+    setSubmitError(null);
     try {
       // Fill empty number slots from computed values; user-typed values always win.
       // CRITICAL: only backend-mapped keys may be backfilled. Virtual computeds
@@ -145,6 +210,8 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
       const clean = cleanFieldsForApi(merged, 'bilderfassung');
       await onSubmit(clean as Bilderfassung['fields']);
       onClose();
+    } catch (err) {
+      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
     } finally {
       setSaving(false);
     }
@@ -217,6 +284,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
         try {
           const blob = dataUriToBlob(uri!);
           const fileUrl = await uploadFile(blob, file.name);
+          setFields(prev => ({ ...prev, schritt1: fileUrl }));
           setFields(prev => ({ ...prev, referenzbild_datei: fileUrl }));
           setFields(prev => ({ ...prev, bild_datei: fileUrl }));
         } catch (uploadErr) {
@@ -265,6 +333,76 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
   const DIALOG_INTENT = defaultValues ? 'Bilderfassung bearbeiten' : 'Bilderfassung hinzufügen';
 
   const fieldBlocks: Record<string, React.ReactNode> = {
+    'schritt1': (
+      <div key="schritt1" className="space-y-1.5">
+        <Label htmlFor="schritt1">Schritt1</Label>
+        {fields.schritt1 ? (
+          <div className="flex items-center gap-3 rounded-lg border p-2">
+            <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-center">
+                <IconFileText size={20} className="text-muted-foreground" />
+              </div>
+              <img
+                src={fields.schritt1}
+                alt=""
+                className="relative h-full w-full object-cover"
+                onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm truncate text-foreground">{fields.schritt1.split("/").pop()}</p>
+              <div className="flex gap-2 mt-1">
+                <label
+                  className="text-xs text-primary hover:underline cursor-pointer"
+                >
+                  Ändern
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const fileUrl = await uploadFile(file, file.name);
+                        setFields(f => ({ ...f, schritt1: fileUrl }));
+                      } catch (err) { console.error('Upload failed:', err); }
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground hover:text-destructive"
+                  onClick={() => setFields(f => ({ ...f, schritt1: undefined }))}
+                >
+                  Entfernen
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <label
+            className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+          >
+            <IconUpload size={20} className="text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <input
+              type="file"
+              accept="image/*,.pdf"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                try {
+                  const fileUrl = await uploadFile(file, file.name);
+                  setFields(f => ({ ...f, schritt1: fileUrl }));
+                } catch (err) { console.error('Upload failed:', err); }
+              }}
+            />
+          </label>
+        )}
+      </div>
+    ),
     'referenzbild_datei': (
       <div key="referenzbild_datei" className="space-y-1.5">
         <Label htmlFor="referenzbild_datei">Referenzbild</Label>
@@ -337,7 +475,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
     ),
     'kamera_referenz': (
       <div key="kamera_referenz" className="space-y-1.5">
-        <Label htmlFor="kamera_referenz">Webkamera</Label>
+        <Label htmlFor="kamera_referenz">Webkamera <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Combobox
           id="kamera_referenz"
           placeholder=""
@@ -352,23 +490,30 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
           onCreateNew={(q) => openCreateWebkameraVerwaltung("kamera_referenz", q)}
           createLabel="Neu in Webkamera-Verwaltung"
         />
+        {showErrors && !fields.kamera_referenz && (
+          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+        )}
       </div>
     ),
     'aufnahmezeitpunkt': (
       <div key="aufnahmezeitpunkt" className="space-y-1.5">
-        <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt</Label>
+        <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt <span className="text-destructive" aria-hidden="true">*</span></Label>
         <DatePicker
           id="aufnahmezeitpunkt"
           placeholder=""
           mode="datetime"
           value={fields.aufnahmezeitpunkt ?? null}
           onChange={v => setFields(f => ({ ...f, aufnahmezeitpunkt: v ?? undefined }))}
+          required
         />
+        {showErrors && !fields.aufnahmezeitpunkt && (
+          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+        )}
       </div>
     ),
     'bild_datei': (
       <div key="bild_datei" className="space-y-1.5">
-        <Label htmlFor="bild_datei">Bild</Label>
+        <Label htmlFor="bild_datei">Bild <span className="text-destructive" aria-hidden="true">*</span></Label>
         {fields.bild_datei ? (
           <div className="flex items-center gap-3 rounded-lg border p-2">
             <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
@@ -434,6 +579,9 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
             />
           </label>
         )}
+        {showErrors && !fields.bild_datei && (
+          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+        )}
       </div>
     ),
     'bild_notiz': (
@@ -457,7 +605,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
             role="radio"
             aria-checked={lookupKey(fields.bild_qualitaet) === 'gut'}
             onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'gut' ? undefined : 'gut') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.bild_qualitaet) === 'gut'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
@@ -470,7 +618,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
             role="radio"
             aria-checked={lookupKey(fields.bild_qualitaet) === 'mittel'}
             onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'mittel' ? undefined : 'mittel') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.bild_qualitaet) === 'mittel'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
@@ -483,7 +631,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
             role="radio"
             aria-checked={lookupKey(fields.bild_qualitaet) === 'schlecht'}
             onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'schlecht' ? undefined : 'schlecht') as any }))}
-            className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               lookupKey(fields.bild_qualitaet) === 'schlecht'
                 ? 'bg-foreground text-background border-foreground'
                 : 'bg-background text-foreground border-input hover:bg-accent'
@@ -559,7 +707,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
   //     kein passendes Backend-Feld in orderedFields) erscheinen NICHT als
   //     Input, sondern unten als kompakte 'Berechnungen'-Übersicht oder als
   //     Inline-Hint unter dem letzten beitragenden Input.
-  const FIELD_LABELS: Record<string, string> = {"referenzbild_datei": "Referenzbild", "kamera_referenz": "Webkamera", "aufnahmezeitpunkt": "Aufnahmezeitpunkt", "bild_datei": "Bild", "bild_notiz": "Notiz", "bild_qualitaet": "Bildqualität", "ki_prompt": "Prompt", "ki_auswertung": "KI-Auswertung", "ki_messwert": "Messwert", "ki_kriterium_erfuellt": "Kriterium erfüllt"};
+  const FIELD_LABELS: Record<string, string> = {"schritt1": "Schritt1", "referenzbild_datei": "Referenzbild", "kamera_referenz": "Webkamera", "aufnahmezeitpunkt": "Aufnahmezeitpunkt", "bild_datei": "Bild", "bild_notiz": "Notiz", "bild_qualitaet": "Bildqualität", "ki_prompt": "Prompt", "ki_auswertung": "KI-Auswertung", "ki_messwert": "Messwert", "ki_kriterium_erfuellt": "Kriterium erfüllt"};
   const CURRENCY_KEYS = new Set<string>([]);
   // Applookup-Referenz-Labels: pro applookup-Feld in dieser Form (ownKey)
   // eine Map { lookupKey: label } für ALLE Felder des Target-Schemas. Wird
@@ -622,7 +770,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
   return (
     <>
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0">
+      <DialogContent className="max-w-lg max-h-[92vh] flex flex-col overflow-hidden p-0 gap-0 max-sm:[&>button]:size-10 max-sm:[&>button]:grid max-sm:[&>button]:place-items-center max-sm:[&>button]:rounded-full max-sm:[&>button]:border max-sm:[&>button]:border-input max-sm:[&>button]:bg-background max-sm:[&>button]:opacity-100 max-sm:[&>button>svg]:size-5">
         <DialogHeader className="px-6 pt-5 pb-3 border-b flex flex-row items-center gap-3 space-y-0">
           <DialogTitle className="flex-1 truncate text-left">{DIALOG_INTENT}</DialogTitle>
           {enablePhotoScan && (
@@ -631,7 +779,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
               onClick={() => setAiOpen(o => !o)}
               aria-expanded={aiOpen}
               aria-controls="ai-fill-panel"
-              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all mr-7 shadow-sm ${
+              className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 max-sm:py-2.5 max-sm:px-4 text-xs font-semibold transition-all mr-7 max-sm:mr-12 shadow-sm ${
                 aiOpen
                   ? 'bg-primary text-primary-foreground ring-2 ring-primary/30'
                   : 'bg-primary/10 text-primary border border-primary/30 hover:bg-primary/15 hover:border-primary/50'
@@ -813,7 +961,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0">
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col min-h-0 min-w-0 max-sm:[&_input]:h-11">
           <div className="flex-1 overflow-y-auto overflow-x-hidden px-6 py-4 space-y-4 min-w-0">
             {(() => {
               const renderField = (k: string) => {
@@ -899,12 +1047,30 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, we
                 })()}
               </div>
             )}
+            {showErrors && missingRequired.length > 0 && (
+              <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
+                <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Bitte fülle die markierten Pflichtfelder aus.
+              </p>
+            )}
+            {recordId && (
+              <div className="pt-2 border-t border-border">
+                <AttachmentsSection appId={APP_IDS.BILDERFASSUNG} recordId={recordId} />
+              </div>
+            )}
           </div>
-          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2">
-            <Button type="button" variant="outline" onClick={onClose}>Abbrechen</Button>
+          {submitError && (
+            <div className="flex items-start gap-2 border-t border-destructive/20 bg-destructive/10 px-6 py-2.5 text-sm text-destructive" role="alert">
+              <IconAlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span className="min-w-0 break-words">{submitError}</span>
+            </div>
+          )}
+          <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2 max-sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">Abbrechen</Button>
             <Button
               type="submit"
-              disabled={saving}
+              className="max-sm:h-12 max-sm:flex-1 max-sm:text-base"
+              disabled={saving || !isDirty || (showErrors && missingRequired.length > 0)}
             >
               {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
             </Button>

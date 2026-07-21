@@ -420,6 +420,7 @@ export default function DashboardOverview() {
           fetchAll();
         }}
         defaultValues={editKamera?.fields}
+        recordId={editKamera?.record_id}
         enablePhotoScan={AI_PHOTO_SCAN['WebkameraVerwaltung']}
         enablePhotoLocation={AI_PHOTO_LOCATION['WebkameraVerwaltung']}
       />

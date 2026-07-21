@@ -6,6 +6,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { APP_IDS } from '@/types/app';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { MediaThumbnail } from '@/components/widgets/MediaViewer';
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconFileText } from '@tabler/icons-react';
 import { format, parseISO } from 'date-fns';
@@ -48,11 +51,15 @@ export function BilderfassungViewDialog({ open, onClose, record, onEdit, webkame
 
         <div className="space-y-4">
           <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Schritt1</Label>
+            {record.fields.schritt1 ? (
+              <MediaThumbnail src={record.fields.schritt1} fit="contain" className="w-full rounded-lg border" />
+            ) : <p className="text-sm text-muted-foreground">—</p>}
+          </div>
+          <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Referenzbild</Label>
             {record.fields.referenzbild_datei ? (
-              <div className="relative w-full rounded-lg bg-muted overflow-hidden border">
-                <img src={record.fields.referenzbild_datei} alt="" className="w-full h-auto object-contain" />
-              </div>
+              <MediaThumbnail src={record.fields.referenzbild_datei} fit="contain" className="w-full rounded-lg border" />
             ) : <p className="text-sm text-muted-foreground">—</p>}
           </div>
           <div className="space-y-1">
@@ -66,9 +73,7 @@ export function BilderfassungViewDialog({ open, onClose, record, onEdit, webkame
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Bild</Label>
             {record.fields.bild_datei ? (
-              <div className="relative w-full rounded-lg bg-muted overflow-hidden border">
-                <img src={record.fields.bild_datei} alt="" className="w-full h-auto object-contain" />
-              </div>
+              <MediaThumbnail src={record.fields.bild_datei} fit="contain" className="w-full rounded-lg border" />
             ) : <p className="text-sm text-muted-foreground">—</p>}
           </div>
           <div className="space-y-1">
@@ -98,6 +103,9 @@ export function BilderfassungViewDialog({ open, onClose, record, onEdit, webkame
             }`}>
               {record.fields.ki_kriterium_erfuellt ? 'Ja' : 'Nein'}
             </span>
+          </div>
+          <div className="pt-2 border-t border-border">
+            <AttachmentsSection appId={APP_IDS.BILDERFASSUNG} recordId={record.record_id} readOnly />
           </div>
         </div>
       </DialogContent>

@@ -721,11 +721,10 @@ SKIP intent UIs when: \
 Only proceed if there is at least ONE workflow that genuinely \
 cannot fit in the dashboard because of its complexity. \
 \
-**IF SKIPPING:** The dashboard currently shows WorkflowPlaceholders (loading skeletons). \
+**IF SKIPPING:** The sidebar currently shows ghost rows ("Abläufe — werden erstellt …"). \
 You MUST clean them up before stopping: \
-1. Edit src/App.tsx — remove the WorkflowPlaceholders import and replace \
-   `<><div className="mb-8"><WorkflowPlaceholders /></div><DashboardOverview /></>` \
-   with just `<DashboardOverview />` \
+1. Edit src/config/intents.ts — change `export const INTENTS_PENDING = true;` \
+   to `export const INTENTS_PENDING = false;` (one-line Edit, nothing else) \
 2. Run 'npm run build' and STOP.
 
 2. IF intent UIs are justified, DISPATCH 'intent_builder' subagents IN PARALLEL (in a single response) for each intent:
@@ -753,16 +752,17 @@ applookup = full URL via createRecordUrl, multipleapplookup = string[] of URLs).
 DO NOT dispatch 'dashboard_builder'.
 
 3. After ALL intent_builder subagents complete:
-   - Edit src/App.tsx to:
-     * Remove the WorkflowPlaceholders import and its usage from the index route
-     * Add lazy imports and routes for the new intent pages
-     * CRITICAL: Keep ALL existing imports, providers (ActionsProvider), wrappers (ErrorBoundary), and route structure intact — only ADD intent routes and remove WorkflowPlaceholders
-   - Read src/pages/DashboardOverview.tsx, then Edit it to ADD a workflow navigation section \
-at the TOP of the dashboard (before other content):
-     * NO section header or title — just the cards directly
-     * Cards with LEFT accent border (border-l-4 border-primary) + icon + title + description + IconChevronRight arrow
-     * Each card is a clickable <a href="#/intents/{slug}"> link
-     * Cards: bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow
+   - Edit src/App.tsx to add lazy imports and routes for the new intent pages.
+     CRITICAL: imports ONLY inside the `// <custom:imports>` markers, routes ONLY
+     inside the `{/* <custom:routes> */}` markers; keep everything else intact.
+   - Edit src/config/intents.ts to REGISTER every intent page — that puts it into
+     the SIDEBAR ("Abläufe" section renders from this registry; do NOT add any
+     navigation cards to the dashboard):
+     * icon imports inside `// <custom:intent-imports>`, entries inside `// <custom:intents>`
+     * entry shape: { path: '/intents/{slug}', label: '1-3 German words', icon: IconX, description: 'one line' }
+     * `path` must equal the App.tsx route; pick a fitting Tabler icon (COMPONENT reference, not JSX)
+     * Also change `export const INTENTS_PENDING = true;` to `false` — this swaps the
+       sidebar's ghost rows for your real entries
    - Run 'npm run build', fix any TypeScript errors, keep fixing until build succeeds
 
 4. After 'npm run build' succeeds, STOP immediately.
@@ -840,11 +840,10 @@ SKIP intent UIs when: \
 Only proceed with intent UIs if there is at least ONE workflow that genuinely \
 cannot fit in the dashboard because of its complexity. \
 \
-**IF SKIPPING:** The dashboard currently shows WorkflowPlaceholders (loading skeletons). \
+**IF SKIPPING:** The sidebar currently shows ghost rows ("Abläufe — werden erstellt …"). \
 You MUST clean them up before stopping: \
-1. Edit src/App.tsx — remove the WorkflowPlaceholders import and replace \
-   `<><div className="mb-8"><WorkflowPlaceholders /></div><DashboardOverview /></>` \
-   with just `<DashboardOverview />` \
+1. Edit src/config/intents.ts — change `export const INTENTS_PENDING = true;` \
+   to `export const INTENTS_PENDING = false;` (one-line Edit, nothing else) \
 2. Run 'npm run build' and STOP.
 
 2. IF intent UIs are justified, DISPATCH ALL SUBAGENTS IN PARALLEL (in a single response):
@@ -871,16 +870,17 @@ LivingAppsService.create<X>Entry() directly with correctly formatted fields (loo
 applookup = full URL via createRecordUrl, multipleapplookup = string[] of URLs).
 
 3. After ALL subagents complete:
-   - Edit src/App.tsx to:
-     * Remove the WorkflowPlaceholders import and its usage from the index route
-     * Add lazy imports and routes for the new intent pages
-     * CRITICAL: Keep ALL existing imports, providers (ActionsProvider), wrappers (ErrorBoundary), and route structure intact — only ADD intent routes and remove WorkflowPlaceholders
-   - Read src/pages/DashboardOverview.tsx, then Edit it to ADD a workflow navigation section \
-at the TOP of the dashboard (before other content):
-     * NO section header or title — just the cards directly
-     * Cards with LEFT accent border (border-l-4 border-primary) + icon + title + description + IconChevronRight arrow
-     * Each card is a clickable <a href="#/intents/{slug}"> link
-     * Cards: bg-card border border-border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow
+   - Edit src/App.tsx to add lazy imports and routes for the new intent pages.
+     CRITICAL: imports ONLY inside the `// <custom:imports>` markers, routes ONLY
+     inside the `{/* <custom:routes> */}` markers; keep everything else intact.
+   - Edit src/config/intents.ts to REGISTER every intent page — that puts it into
+     the SIDEBAR ("Abläufe" section renders from this registry; do NOT add any
+     navigation cards to the dashboard):
+     * icon imports inside `// <custom:intent-imports>`, entries inside `// <custom:intents>`
+     * entry shape: { path: '/intents/{slug}', label: '1-3 German words', icon: IconX, description: 'one line' }
+     * `path` must equal the App.tsx route; pick a fitting Tabler icon (COMPONENT reference, not JSX)
+     * Also change `export const INTENTS_PENDING = true;` to `false` — this swaps the
+       sidebar's ghost rows for your real entries
    - Run 'npm run build', fix any TypeScript errors, keep fixing until build succeeds
 
 4. After 'npm run build' succeeds, STOP immediately.

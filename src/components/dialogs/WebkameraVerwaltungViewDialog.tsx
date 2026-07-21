@@ -6,9 +6,12 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { APP_IDS } from '@/types/app';
+import { AttachmentsSection } from '@/components/AttachmentsSection';
 import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconChevronDown } from '@tabler/icons-react';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
+import { MapRouteLinks } from '@/components/widgets/MapWidget';
 
 interface WebkameraVerwaltungViewDialogProps {
   open: boolean;
@@ -60,7 +63,10 @@ export function WebkameraVerwaltungViewDialog({ open, onClose, record, onEdit }:
                 readOnly
               />
             )}
-            <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors" onClick={() => setShowCoords(v => !v)}>
+            {record.fields.kamera_geo?.lat != null && record.fields.kamera_geo?.long != null && (
+              <MapRouteLinks lat={record.fields.kamera_geo.lat} long={record.fields.kamera_geo.long} className="mt-1" />
+            )}
+            <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
               {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
               <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
             </button>
@@ -78,6 +84,9 @@ export function WebkameraVerwaltungViewDialog({ open, onClose, record, onEdit }:
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">Status</Label>
             <Badge variant="secondary">{record.fields.kamera_status?.label ?? '—'}</Badge>
+          </div>
+          <div className="pt-2 border-t border-border">
+            <AttachmentsSection appId={APP_IDS.WEBKAMERA_VERWALTUNG} recordId={record.record_id} readOnly />
           </div>
         </div>
       </DialogContent>

@@ -126,13 +126,14 @@ export default function PublicFormBilderfassung() {
 
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
-            <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt</Label>
+            <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt *</Label>
             <DatePicker
               id="aufnahmezeitpunkt"
               placeholder=""
               mode="datetime"
               value={fields.aufnahmezeitpunkt ?? null}
               onChange={v => setFields(f => ({ ...f, aufnahmezeitpunkt: v ?? undefined }))}
+              required
             />
           </div>
           <div className="space-y-2">
@@ -153,7 +154,7 @@ export default function PublicFormBilderfassung() {
                 role="radio"
                 aria-checked={lookupKey(fields.bild_qualitaet) === 'gut'}
                 onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'gut' ? undefined : 'gut') as any }))}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   lookupKey(fields.bild_qualitaet) === 'gut'
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-foreground border-input hover:bg-accent'
@@ -166,7 +167,7 @@ export default function PublicFormBilderfassung() {
                 role="radio"
                 aria-checked={lookupKey(fields.bild_qualitaet) === 'mittel'}
                 onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'mittel' ? undefined : 'mittel') as any }))}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   lookupKey(fields.bild_qualitaet) === 'mittel'
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-foreground border-input hover:bg-accent'
@@ -179,7 +180,7 @@ export default function PublicFormBilderfassung() {
                 role="radio"
                 aria-checked={lookupKey(fields.bild_qualitaet) === 'schlecht'}
                 onClick={() => setFields(f => ({ ...f, bild_qualitaet: (lookupKey(f.bild_qualitaet) === 'schlecht' ? undefined : 'schlecht') as any }))}
-                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                className={`inline-flex items-center justify-center min-h-9 max-sm:min-h-11 max-sm:px-4 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
                   lookupKey(fields.bild_qualitaet) === 'schlecht'
                     ? 'bg-foreground text-background border-foreground'
                     : 'bg-background text-foreground border-input hover:bg-accent'

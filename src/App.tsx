@@ -7,10 +7,12 @@ import { ErrorBusProvider } from '@/components/ErrorBus';
 import { Layout } from '@/components/Layout';
 import DashboardOverview from '@/pages/DashboardOverview';
 import AdminPage from '@/pages/AdminPage';
-import BilderfassungPage from '@/pages/BilderfassungPage';
 import WebkameraVerwaltungPage from '@/pages/WebkameraVerwaltungPage';
-import PublicFormBilderfassung from '@/pages/public/PublicForm_Bilderfassung';
+import WebkameraVerwaltungDetailPage from '@/pages/WebkameraVerwaltungDetailPage';
+import BilderfassungPage from '@/pages/BilderfassungPage';
+import BilderfassungDetailPage from '@/pages/BilderfassungDetailPage';
 import PublicFormWebkameraVerwaltung from '@/pages/public/PublicForm_WebkameraVerwaltung';
+import PublicFormBilderfassung from '@/pages/public/PublicForm_Bilderfassung';
 // <public:imports>
 // </public:imports>
 // <custom:imports>
@@ -23,14 +25,16 @@ export default function App() {
         <HashRouter>
           <ActionsProvider>
             <Routes>
-              <Route path="public/69e1f9bc1913ab36ef161891" element={<PublicFormBilderfassung />} />
               <Route path="public/69e1f9b9e099184b4f891185" element={<PublicFormWebkameraVerwaltung />} />
+              <Route path="public/69e1f9bc1913ab36ef161891" element={<PublicFormBilderfassung />} />
               {/* <public:routes> */}
               {/* </public:routes> */}
               <Route element={<Layout />}>
                 <Route index element={<DashboardOverview />} />
-                <Route path="bilderfassung" element={<BilderfassungPage />} />
                 <Route path="webkamera-verwaltung" element={<WebkameraVerwaltungPage />} />
+                <Route path="webkamera-verwaltung/:id" element={<WebkameraVerwaltungDetailPage />} />
+                <Route path="bilderfassung" element={<BilderfassungPage />} />
+                <Route path="bilderfassung/:id" element={<BilderfassungDetailPage />} />
                 <Route path="admin" element={<AdminPage />} />
                 {/* <custom:routes> */}
               {/* </custom:routes> */}
