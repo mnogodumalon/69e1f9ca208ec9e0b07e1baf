@@ -1,3 +1,17 @@
+/**
+ * WebkameraVerwaltungDialog — pre-generated create/edit dialog for WebkameraVerwaltung.
+ *
+ * Props: open, onClose, onSubmit(fields) => Promise<void>, defaultValues?,
+ * recordId? (pass when EDITING — enables the attachments section),
+ * enablePhotoScan?, enablePhotoLocation?.
+ *
+ * defaultValues is SHAPE-TOLERANT and its prop type is the EXPORTED
+ * WebkameraVerwaltungDialogDefaults — NOT the entity field type: lookup fields accept
+ * the bare KEY string (or LookupValue), applookup fields the bare record id
+ * (or record URL); the dialog normalizes. Type prefill STATE with the export:
+ *  ❌ useState<Partial<WebkameraVerwaltung['fields']>>({ … })   // LookupValue fields reject string prefills (TS2322)
+ *  ✓ useState<WebkameraVerwaltungDialogDefaults | undefined>(undefined)
+ */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { WebkameraVerwaltung, LookupValue } from '@/types/app';
 import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
@@ -13,6 +27,7 @@ import type { ComputedContext } from '@/config/form-enhancements/types';
 import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
 import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/WebkameraVerwaltung';
 import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { t, appLabel, fieldLabel, lookupLabel, localeTag, CURRENCY } from '@/i18n';
 import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClipboard, IconCrosshair, IconFileText, IconLoader2, IconPhotoPlus, IconSparkles, IconUpload, IconX } from '@tabler/icons-react';
@@ -21,6 +36,11 @@ import { GeoMapPicker } from '@/components/GeoMapPicker';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { lookupKey } from '@/lib/formatters';
 
+/** Widened prefill type for WebkameraVerwaltungDialog.defaultValues — see file header. */
+export type WebkameraVerwaltungDialogDefaults = Omit<WebkameraVerwaltung['fields'], 'kamera_status'> & {
+    kamera_status?: LookupValue | string;
+  };
+
 interface WebkameraVerwaltungDialogProps {
   open: boolean;
   onClose: () => void;
@@ -28,9 +48,7 @@ interface WebkameraVerwaltungDialogProps {
   /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
    *  LookupValue object; applookup fields the bare record id or the full
    *  record URL — the dialog normalizes both. */
-  defaultValues?: Omit<WebkameraVerwaltung['fields'], 'kamera_status'> & {
-    kamera_status?: LookupValue | string;
-  };
+  defaultValues?: WebkameraVerwaltungDialogDefaults;
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
   enablePhotoScan?: boolean;
@@ -184,7 +202,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
       await onSubmit(clean as WebkameraVerwaltung['fields']);
       onClose();
     } catch (err) {
-      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
+      setSubmitError(err instanceof Error && err.message ? err.message : t('submit_error'));
     } finally {
       setSaving(false);
     }
@@ -281,7 +299,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
       setScanSuccess(true);
       setTimeout(() => setScanSuccess(false), 3000);
     } catch (err) {
-      console.error('Scan fehlgeschlagen:', err);
+      console.error(`${t('scan_error')}:`, err);
       alert(err instanceof Error ? err.message : String(err));
     } finally {
       setScanning(false);
@@ -316,12 +334,14 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     }
   }, []);
 
-  const DIALOG_INTENT = defaultValues ? 'Webkamera-Verwaltung bearbeiten' : 'Webkamera-Verwaltung hinzufügen';
+  const DIALOG_INTENT = defaultValues
+    ? t('edit_entity', { entity: appLabel('webkamera_verwaltung') })
+    : t('new_entity', { entity: appLabel('webkamera_verwaltung') });
 
   const fieldBlocks: Record<string, React.ReactNode> = {
     'kamera_name': (
       <div key="kamera_name" className="space-y-1.5">
-        <Label htmlFor="kamera_name">Kameraname <span className="text-destructive" aria-hidden="true">*</span></Label>
+        <Label htmlFor="kamera_name">{fieldLabel('webkamera_verwaltung', 'kamera_name')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="kamera_name"
           placeholder=""
@@ -330,13 +350,13 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
           required
         />
         {showErrors && !fields.kamera_name && (
-          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
         )}
       </div>
     ),
     'kamera_standort': (
       <div key="kamera_standort" className="space-y-1.5">
-        <Label htmlFor="kamera_standort">Standortbeschreibung <span className="text-destructive" aria-hidden="true">*</span></Label>
+        <Label htmlFor="kamera_standort">{fieldLabel('webkamera_verwaltung', 'kamera_standort')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Input
           id="kamera_standort"
           placeholder=""
@@ -345,13 +365,13 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
           required
         />
         {showErrors && !fields.kamera_standort && (
-          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
         )}
       </div>
     ),
     'kamera_url': (
       <div key="kamera_url" className="space-y-1.5">
-        <Label htmlFor="kamera_url">Stream-URL</Label>
+        <Label htmlFor="kamera_url">{fieldLabel('webkamera_verwaltung', 'kamera_url')}</Label>
         <Input
           id="kamera_url"
           value={fields.kamera_url ?? ''}
@@ -361,18 +381,18 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     ),
     'kamera_geo': (
       <div key="kamera_geo" className="space-y-1.5">
-        <Label htmlFor="kamera_geo">Geografischer Standort</Label>
+        <Label htmlFor="kamera_geo">{fieldLabel('webkamera_verwaltung', 'kamera_geo')}</Label>
         <div className="space-y-3">
           <Button type="button" variant="outline" className="w-full max-sm:h-11" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
             {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
-            Aktuellen Standort verwenden
+            {t('fr_use_location')}
           </Button>
           <AddressAutocomplete
-            placeholder="Adresse suchen und auswählen…"
+            placeholder={t('fr_search_address')}
             onSelect={r => setFields(f => ({ ...f, kamera_geo: { lat: r.lat, long: r.long, info: r.label } as any }))}
           />
           {geoFromPhoto && fields.kamera_geo && (
-            <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
+            <p className="text-xs text-primary italic">{t('fr_photo_location')}</p>
           )}
           {fields.kamera_geo?.info && (
             <p className="text-sm text-muted-foreground break-words whitespace-normal">
@@ -387,13 +407,13 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             />
           )}
           <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
-            {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
+            {showCoords ? t('fr_hide_coords') : t('fr_show_coords')}
             <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
           </button>
           {showCoords && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Breitengrad</Label>
+                <Label className="text-xs text-muted-foreground">{t('fr_lat')}</Label>
                 <Input type="number" step="any"
                   value={fields.kamera_geo?.lat ?? ''}
                   onChange={e => {
@@ -403,7 +423,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Längengrad</Label>
+                <Label className="text-xs text-muted-foreground">{t('fr_long')}</Label>
                 <Input type="number" step="any"
                   value={fields.kamera_geo?.long ?? ''}
                   onChange={e => {
@@ -419,7 +439,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     ),
     'kamera_beschreibung': (
       <div key="kamera_beschreibung" className="space-y-1.5">
-        <Label htmlFor="kamera_beschreibung">Beschreibung</Label>
+        <Label htmlFor="kamera_beschreibung">{fieldLabel('webkamera_verwaltung', 'kamera_beschreibung')}</Label>
         <Textarea
           id="kamera_beschreibung"
           placeholder=""
@@ -431,7 +451,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     ),
     'kamera_status': (
       <div key="kamera_status" className="space-y-1.5">
-        <Label htmlFor="kamera_status">Status <span className="text-destructive" aria-hidden="true">*</span></Label>
+        <Label htmlFor="kamera_status">{fieldLabel('webkamera_verwaltung', 'kamera_status')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <div role="radiogroup" className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -444,7 +464,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Aktiv
+            {lookupLabel('webkamera_verwaltung', 'kamera_status', 'aktiv') ?? 'Aktiv'}
           </button>
           <button
             type="button"
@@ -457,7 +477,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Inaktiv
+            {lookupLabel('webkamera_verwaltung', 'kamera_status', 'inaktiv') ?? 'Inaktiv'}
           </button>
           <button
             type="button"
@@ -470,11 +490,11 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            In Wartung
+            {lookupLabel('webkamera_verwaltung', 'kamera_status', 'wartung') ?? 'In Wartung'}
           </button>
         </div>
         {showErrors && !fields.kamera_status && (
-          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
         )}
       </div>
     ),
@@ -547,9 +567,9 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
     // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
     const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
     if (looksLikeCurrency) {
-      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+    return n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
   }
 
   return (
@@ -571,14 +591,14 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
               }`}
             >
               <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
-              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <span className="hidden sm:inline">{t('smart_fill')}</span>
               <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
             </button>
           )}
         </DialogHeader>
         {enablePhotoScan && aiOpen && (
           <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+            <p className="text-xs text-muted-foreground">{t('scan_header_sub')}</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -588,21 +608,21 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
               />
               <span className="text-xs text-muted-foreground leading-snug">
                 <Label htmlFor="ai-use-personal-info" className="text-xs font-normal text-muted-foreground cursor-pointer inline">
-                  KI-Assistent darf zusätzlich Informationen zu meiner Person verwenden
+                  {t('useinfo_label')}
                 </Label>
                 {' '}
                 <button type="button" onClick={handleShowProfileInfo} className="text-xs text-primary hover:underline whitespace-nowrap">
-                  {profileLoading ? 'Lade...' : '(mehr Infos)'}
+                  {profileLoading ? t('useinfo_loading') : `(${t('useinfo_more')})`}
                 </button>
               </span>
             </div>
             {showProfileInfo && (
               <div className="rounded-md border bg-muted/50 p-2 text-xs max-h-40 overflow-y-auto">
-                <p className="font-medium mb-1">Folgende Infos über dich können von der KI genutzt werden:</p>
+                <p className="font-medium mb-1">{t('profile_preamble')}</p>
                 {profileData ? Object.values(profileData).map((v, i) => (
                   <span key={i}>{i > 0 && ", "}{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
                 )) : (
-                  <span className="text-muted-foreground">Profil konnte nicht geladen werden</span>
+                  <span className="text-muted-foreground">{t('useinfo_error')}</span>
                 )}
               </div>
             )}
@@ -633,8 +653,8 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                     <IconLoader2 className="h-7 w-7 text-primary animate-spin" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">KI analysiert...</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Felder werden automatisch ausgefüllt</p>
+                    <p className="text-sm font-medium">{t('scan_analyzing')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_analyzing_sub')}</p>
                   </div>
                 </div>
               ) : scanSuccess ? (
@@ -643,8 +663,8 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                     <IconCircleCheck className="h-7 w-7 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Felder ausgefüllt!</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Prüfe die Werte und passe sie ggf. an</p>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{t('scan_success')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_success_sub')}</p>
                   </div>
                 </div>
               ) : (
@@ -653,7 +673,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                     <IconPhotoPlus className="h-7 w-7 text-primary/70" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">Foto oder Dokument hierher ziehen oder auswählen</p>
+                    <p className="text-sm font-medium">{t('scan_upload')}</p>
                   </div>
                 </div>
               )}
@@ -677,11 +697,11 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             <div className="grid grid-cols-3 gap-2">
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); cameraInputRef.current?.click(); }}>
-                <IconCamera className="h-3.5 w-3.5 mr-1" />Kamera
+                <IconCamera className="h-3.5 w-3.5 mr-1" />{t('scan_camera_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}>
-                <IconUpload className="h-3.5 w-3.5 mr-1" />Foto wählen
+                <IconUpload className="h-3.5 w-3.5 mr-1" />{t('scan_file_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => {
@@ -692,13 +712,13 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                     setTimeout(() => { if (fileInputRef.current) fileInputRef.current.accept = 'image/*,application/pdf'; }, 100);
                   }
                 }}>
-                <IconFileText className="h-3.5 w-3.5 mr-1" />Dokument
+                <IconFileText className="h-3.5 w-3.5 mr-1" />{t('scan_doc_btn')}
               </Button>
             </div>
 
             <div className="relative">
               <Textarea
-                placeholder="Text eingeben oder einfügen, z.B. Notizen, E-Mails, Beschreibungen..."
+                placeholder={t('scan_text_placeholder')}
                 value={aiText}
                 onChange={e => {
                   setAiText(e.target.value);
@@ -726,7 +746,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                     if (text) setAiText(prev => prev ? prev + '\n' + text : text);
                   } catch {}
                 }}
-                title="Paste"
+                title={t('paste')}
               >
                 <IconClipboard className="h-4 w-4" />
               </button>
@@ -740,7 +760,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
                 disabled={scanning}
                 onClick={() => handleAiExtract()}
               >
-                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
+                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />{t('scan_text_analyze')}
               </Button>
             )}
           </div>
@@ -835,7 +855,7 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             {showErrors && missingRequired.length > 0 && (
               <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
                 <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Bitte fülle die markierten Pflichtfelder aus.
+                {t('missing_required')}
               </p>
             )}
             {recordId && (
@@ -851,13 +871,13 @@ export function WebkameraVerwaltungDialog({ open, onClose, onSubmit, defaultValu
             </div>
           )}
           <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2 max-sm:flex-row">
-            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">Abbrechen</Button>
+            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">{t('cancel')}</Button>
             <Button
               type="submit"
               className="max-sm:h-12 max-sm:flex-1 max-sm:text-base"
               disabled={saving || !isDirty || (showErrors && missingRequired.length > 0)}
             >
-              {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
+              {saving ? t('saving') : defaultValues ? t('save') : t('create')}
             </Button>
           </DialogFooter>
         </form>

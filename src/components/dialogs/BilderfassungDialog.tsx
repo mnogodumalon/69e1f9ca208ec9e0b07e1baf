@@ -1,3 +1,18 @@
+/**
+ * BilderfassungDialog — pre-generated create/edit dialog for Bilderfassung.
+ *
+ * Props: open, onClose, onSubmit(fields) => Promise<void>, defaultValues?,
+ * recordId? (pass when EDITING — enables the attachments section),
+ * webkameraVerwaltungList (full hook array — resolves the WebkameraVerwaltung applookup),
+ * enablePhotoScan?, enablePhotoLocation?.
+ *
+ * defaultValues is SHAPE-TOLERANT and its prop type is the EXPORTED
+ * BilderfassungDialogDefaults — NOT the entity field type: lookup fields accept
+ * the bare KEY string (or LookupValue), applookup fields the bare record id
+ * (or record URL); the dialog normalizes. Type prefill STATE with the export:
+ *  ❌ useState<Partial<Bilderfassung['fields']>>({ … })   // LookupValue fields reject string prefills (TS2322)
+ *  ✓ useState<BilderfassungDialogDefaults | undefined>(undefined)
+ */
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import type { Bilderfassung, WebkameraVerwaltung, LookupValue } from '@/types/app';
 import { APP_IDS, LOOKUP_OPTIONS } from '@/types/app';
@@ -13,6 +28,7 @@ import type { ComputedContext } from '@/config/form-enhancements/types';
 import { applyFieldOrder, flattenFieldOrder, applyDefaults, evalComputed, numberInputProps, clampNumberValue, classifyComputed, extractApplookupRefs, mergeApplookupRefs, resolveApplookupRef } from '@/config/form-enhancements/types';
 import { formEnhancements, computedDeps, computedApplookupRefs } from '@/config/form-enhancements/Bilderfassung';
 import { AttachmentsSection } from '@/components/AttachmentsSection';
+import { t, appLabel, fieldLabel, lookupLabel, localeTag, CURRENCY } from '@/i18n';
 import { Textarea } from '@/components/ui/textarea';
 import { Combobox } from '@/components/Combobox';
 import { WebkameraVerwaltungDialog } from '@/components/dialogs/WebkameraVerwaltungDialog';
@@ -22,6 +38,11 @@ import { IconAlertCircle, IconCamera, IconChevronDown, IconCircleCheck, IconClip
 import { fileToDataUri, extractFromInput, extractPhotoMeta, reverseGeocode, dataUriToBlob } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
 
+/** Widened prefill type for BilderfassungDialog.defaultValues — see file header. */
+export type BilderfassungDialogDefaults = Omit<Bilderfassung['fields'], 'bild_qualitaet'> & {
+    bild_qualitaet?: LookupValue | string;
+  };
+
 interface BilderfassungDialogProps {
   open: boolean;
   onClose: () => void;
@@ -29,9 +50,7 @@ interface BilderfassungDialogProps {
   /** SHAPE-TOLERANT: lookup fields accept the bare key (string) or the
    *  LookupValue object; applookup fields the bare record id or the full
    *  record URL — the dialog normalizes both. */
-  defaultValues?: Omit<Bilderfassung['fields'], 'bild_qualitaet'> & {
-    bild_qualitaet?: LookupValue | string;
-  };
+  defaultValues?: BilderfassungDialogDefaults;
   /** Record id when editing — enables the attachments section. Omit on create. */
   recordId?: string;
   webkameraVerwaltungList: WebkameraVerwaltung[];
@@ -211,7 +230,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
       await onSubmit(clean as Bilderfassung['fields']);
       onClose();
     } catch (err) {
-      setSubmitError(err instanceof Error && err.message ? err.message : 'Speichern fehlgeschlagen.');
+      setSubmitError(err instanceof Error && err.message ? err.message : t('submit_error'));
     } finally {
       setSaving(false);
     }
@@ -295,7 +314,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
       setScanSuccess(true);
       setTimeout(() => setScanSuccess(false), 3000);
     } catch (err) {
-      console.error('Scan fehlgeschlagen:', err);
+      console.error(`${t('scan_error')}:`, err);
       alert(err instanceof Error ? err.message : String(err));
     } finally {
       setScanning(false);
@@ -330,12 +349,14 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     }
   }, []);
 
-  const DIALOG_INTENT = defaultValues ? 'Bilderfassung bearbeiten' : 'Bilderfassung hinzufügen';
+  const DIALOG_INTENT = defaultValues
+    ? t('edit_entity', { entity: appLabel('bilderfassung') })
+    : t('new_entity', { entity: appLabel('bilderfassung') });
 
   const fieldBlocks: Record<string, React.ReactNode> = {
     'schritt1': (
       <div key="schritt1" className="space-y-1.5">
-        <Label htmlFor="schritt1">Schritt1</Label>
+        <Label htmlFor="schritt1">{fieldLabel('bilderfassung', 'schritt1')}</Label>
         {fields.schritt1 ? (
           <div className="flex items-center gap-3 rounded-lg border p-2">
             <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
@@ -355,7 +376,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 <label
                   className="text-xs text-primary hover:underline cursor-pointer"
                 >
-                  Ändern
+                  {t('fr_change')}
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -375,7 +396,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                   className="text-xs text-muted-foreground hover:text-destructive"
                   onClick={() => setFields(f => ({ ...f, schritt1: undefined }))}
                 >
-                  Entfernen
+                  {t('fr_remove')}
                 </button>
               </div>
             </div>
@@ -385,7 +406,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
             className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
           >
             <IconUpload size={20} className="text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <span className="text-sm text-muted-foreground">{t('fr_upload_file')}</span>
             <input
               type="file"
               accept="image/*,.pdf"
@@ -405,7 +426,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     ),
     'referenzbild_datei': (
       <div key="referenzbild_datei" className="space-y-1.5">
-        <Label htmlFor="referenzbild_datei">Referenzbild</Label>
+        <Label htmlFor="referenzbild_datei">{fieldLabel('bilderfassung', 'referenzbild_datei')}</Label>
         {fields.referenzbild_datei ? (
           <div className="flex items-center gap-3 rounded-lg border p-2">
             <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
@@ -425,7 +446,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 <label
                   className="text-xs text-primary hover:underline cursor-pointer"
                 >
-                  Ändern
+                  {t('fr_change')}
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -445,7 +466,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                   className="text-xs text-muted-foreground hover:text-destructive"
                   onClick={() => setFields(f => ({ ...f, referenzbild_datei: undefined }))}
                 >
-                  Entfernen
+                  {t('fr_remove')}
                 </button>
               </div>
             </div>
@@ -455,7 +476,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
             className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
           >
             <IconUpload size={20} className="text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <span className="text-sm text-muted-foreground">{t('fr_upload_file')}</span>
             <input
               type="file"
               accept="image/*,.pdf"
@@ -475,7 +496,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     ),
     'kamera_referenz': (
       <div key="kamera_referenz" className="space-y-1.5">
-        <Label htmlFor="kamera_referenz">Webkamera <span className="text-destructive" aria-hidden="true">*</span></Label>
+        <Label htmlFor="kamera_referenz">{fieldLabel('bilderfassung', 'kamera_referenz')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <Combobox
           id="kamera_referenz"
           placeholder=""
@@ -485,19 +506,17 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
           }))}
           value={extractRecordId(fields.kamera_referenz)}
           onChange={id => setFields(f => ({ ...f, kamera_referenz: id ? createRecordUrl(APP_IDS.WEBKAMERA_VERWALTUNG, id) : undefined }))}
-          searchPlaceholder="Suchen…"
-          emptyText="Kein Treffer"
           onCreateNew={(q) => openCreateWebkameraVerwaltung("kamera_referenz", q)}
-          createLabel="Neu in Webkamera-Verwaltung"
+          createLabel={t('create_in', { entity: appLabel('webkamera_verwaltung') })}
         />
         {showErrors && !fields.kamera_referenz && (
-          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
         )}
       </div>
     ),
     'aufnahmezeitpunkt': (
       <div key="aufnahmezeitpunkt" className="space-y-1.5">
-        <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt <span className="text-destructive" aria-hidden="true">*</span></Label>
+        <Label htmlFor="aufnahmezeitpunkt">{fieldLabel('bilderfassung', 'aufnahmezeitpunkt')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         <DatePicker
           id="aufnahmezeitpunkt"
           placeholder=""
@@ -507,13 +526,13 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
           required
         />
         {showErrors && !fields.aufnahmezeitpunkt && (
-          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
         )}
       </div>
     ),
     'bild_datei': (
       <div key="bild_datei" className="space-y-1.5">
-        <Label htmlFor="bild_datei">Bild <span className="text-destructive" aria-hidden="true">*</span></Label>
+        <Label htmlFor="bild_datei">{fieldLabel('bilderfassung', 'bild_datei')} <span className="text-destructive" aria-hidden="true">*</span></Label>
         {fields.bild_datei ? (
           <div className="flex items-center gap-3 rounded-lg border p-2">
             <div className="relative h-14 w-14 shrink-0 rounded-md bg-muted overflow-hidden">
@@ -533,7 +552,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 <label
                   className="text-xs text-primary hover:underline cursor-pointer"
                 >
-                  Ändern
+                  {t('fr_change')}
                   <input
                     type="file"
                     accept="image/*,.pdf"
@@ -553,7 +572,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                   className="text-xs text-muted-foreground hover:text-destructive"
                   onClick={() => setFields(f => ({ ...f, bild_datei: undefined }))}
                 >
-                  Entfernen
+                  {t('fr_remove')}
                 </button>
               </div>
             </div>
@@ -563,7 +582,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
             className="flex flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed border-muted-foreground/25 p-4 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
           >
             <IconUpload size={20} className="text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Datei hochladen</span>
+            <span className="text-sm text-muted-foreground">{t('fr_upload_file')}</span>
             <input
               type="file"
               accept="image/*,.pdf"
@@ -580,13 +599,13 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
           </label>
         )}
         {showErrors && !fields.bild_datei && (
-          <p className="text-xs text-destructive mt-1">Pflichtfeld</p>
+          <p className="text-xs text-destructive mt-1">{t('required_hint')}</p>
         )}
       </div>
     ),
     'bild_notiz': (
       <div key="bild_notiz" className="space-y-1.5">
-        <Label htmlFor="bild_notiz">Notiz</Label>
+        <Label htmlFor="bild_notiz">{fieldLabel('bilderfassung', 'bild_notiz')}</Label>
         <Textarea
           id="bild_notiz"
           placeholder=""
@@ -598,7 +617,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     ),
     'bild_qualitaet': (
       <div key="bild_qualitaet" className="space-y-1.5">
-        <Label htmlFor="bild_qualitaet">Bildqualität</Label>
+        <Label htmlFor="bild_qualitaet">{fieldLabel('bilderfassung', 'bild_qualitaet')}</Label>
         <div role="radiogroup" className="flex flex-wrap gap-1.5">
           <button
             type="button"
@@ -611,7 +630,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Gut
+            {lookupLabel('bilderfassung', 'bild_qualitaet', 'gut') ?? 'Gut'}
           </button>
           <button
             type="button"
@@ -624,7 +643,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Mittel
+            {lookupLabel('bilderfassung', 'bild_qualitaet', 'mittel') ?? 'Mittel'}
           </button>
           <button
             type="button"
@@ -637,14 +656,14 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 : 'bg-background text-foreground border-input hover:bg-accent'
             }`}
           >
-            Schlecht
+            {lookupLabel('bilderfassung', 'bild_qualitaet', 'schlecht') ?? 'Schlecht'}
           </button>
         </div>
       </div>
     ),
     'ki_prompt': (
       <div key="ki_prompt" className="space-y-1.5">
-        <Label htmlFor="ki_prompt">Prompt</Label>
+        <Label htmlFor="ki_prompt">{fieldLabel('bilderfassung', 'ki_prompt')}</Label>
         <Textarea
           id="ki_prompt"
           placeholder=""
@@ -656,7 +675,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     ),
     'ki_auswertung': (
       <div key="ki_auswertung" className="space-y-1.5">
-        <Label htmlFor="ki_auswertung">KI-Auswertung</Label>
+        <Label htmlFor="ki_auswertung">{fieldLabel('bilderfassung', 'ki_auswertung')}</Label>
         <Textarea
           id="ki_auswertung"
           placeholder=""
@@ -668,7 +687,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     ),
     'ki_messwert': (
       <div key="ki_messwert" className="space-y-1.5">
-        <Label htmlFor="ki_messwert">Messwert</Label>
+        <Label htmlFor="ki_messwert">{fieldLabel('bilderfassung', 'ki_messwert')}</Label>
         <Input
           id="ki_messwert"
           type="number"
@@ -682,14 +701,14 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     ),
     'ki_kriterium_erfuellt': (
       <div key="ki_kriterium_erfuellt" className="space-y-1.5">
-        <Label htmlFor="ki_kriterium_erfuellt">Kriterium erfüllt</Label>
+        <Label htmlFor="ki_kriterium_erfuellt">{fieldLabel('bilderfassung', 'ki_kriterium_erfuellt')}</Label>
         <div className="flex items-center gap-2 pt-1">
           <Checkbox
             id="ki_kriterium_erfuellt"
             checked={!!fields.ki_kriterium_erfuellt}
             onCheckedChange={(v) => setFields(f => ({ ...f, ki_kriterium_erfuellt: !!v }))}
           />
-          <Label htmlFor="ki_kriterium_erfuellt" className="font-normal">Kriterium erfüllt</Label>
+          <Label htmlFor="ki_kriterium_erfuellt" className="font-normal">{fieldLabel('bilderfassung', 'ki_kriterium_erfuellt')}</Label>
         </div>
       </div>
     ),
@@ -762,9 +781,9 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
     // Backend-Feld mit €-Label ODER virtueller Computed-Key, dessen Name nach Geld aussieht.
     const looksLikeCurrency = CURRENCY_KEYS.has(k) || /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k);
     if (looksLikeCurrency) {
-      return n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
-    return n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+    return n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
   }
 
   return (
@@ -786,14 +805,14 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
               }`}
             >
               <IconSparkles className={`h-3.5 w-3.5 ${aiOpen ? '' : 'text-primary'}`} />
-              <span className="hidden sm:inline">KI-Ausfüllen</span>
+              <span className="hidden sm:inline">{t('smart_fill')}</span>
               <IconChevronDown className={`h-3 w-3 transition-transform ${aiOpen ? 'rotate-180' : ''}`} />
             </button>
           )}
         </DialogHeader>
         {enablePhotoScan && aiOpen && (
           <div id="ai-fill-panel" className="border-b bg-muted/20 px-6 py-4 space-y-3">
-            <p className="text-xs text-muted-foreground">Versteht Fotos, Dokumente und Text und füllt alles für dich aus</p>
+            <p className="text-xs text-muted-foreground">{t('scan_header_sub')}</p>
             <div className="flex items-start gap-2 pl-0.5">
               <Checkbox
                 id="ai-use-personal-info"
@@ -803,21 +822,21 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
               />
               <span className="text-xs text-muted-foreground leading-snug">
                 <Label htmlFor="ai-use-personal-info" className="text-xs font-normal text-muted-foreground cursor-pointer inline">
-                  KI-Assistent darf zusätzlich Informationen zu meiner Person verwenden
+                  {t('useinfo_label')}
                 </Label>
                 {' '}
                 <button type="button" onClick={handleShowProfileInfo} className="text-xs text-primary hover:underline whitespace-nowrap">
-                  {profileLoading ? 'Lade...' : '(mehr Infos)'}
+                  {profileLoading ? t('useinfo_loading') : `(${t('useinfo_more')})`}
                 </button>
               </span>
             </div>
             {showProfileInfo && (
               <div className="rounded-md border bg-muted/50 p-2 text-xs max-h-40 overflow-y-auto">
-                <p className="font-medium mb-1">Folgende Infos über dich können von der KI genutzt werden:</p>
+                <p className="font-medium mb-1">{t('profile_preamble')}</p>
                 {profileData ? Object.values(profileData).map((v, i) => (
                   <span key={i}>{i > 0 && ", "}{typeof v === "object" ? JSON.stringify(v) : String(v)}</span>
                 )) : (
-                  <span className="text-muted-foreground">Profil konnte nicht geladen werden</span>
+                  <span className="text-muted-foreground">{t('useinfo_error')}</span>
                 )}
               </div>
             )}
@@ -848,8 +867,8 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                     <IconLoader2 className="h-7 w-7 text-primary animate-spin" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">KI analysiert...</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Felder werden automatisch ausgefüllt</p>
+                    <p className="text-sm font-medium">{t('scan_analyzing')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_analyzing_sub')}</p>
                   </div>
                 </div>
               ) : scanSuccess ? (
@@ -858,8 +877,8 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                     <IconCircleCheck className="h-7 w-7 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Felder ausgefüllt!</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Prüfe die Werte und passe sie ggf. an</p>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">{t('scan_success')}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{t('scan_success_sub')}</p>
                   </div>
                 </div>
               ) : (
@@ -868,7 +887,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                     <IconPhotoPlus className="h-7 w-7 text-primary/70" />
                   </div>
                   <div className="text-center">
-                    <p className="text-sm font-medium">Foto oder Dokument hierher ziehen oder auswählen</p>
+                    <p className="text-sm font-medium">{t('scan_upload')}</p>
                   </div>
                 </div>
               )}
@@ -892,11 +911,11 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
             <div className="grid grid-cols-3 gap-2">
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); cameraInputRef.current?.click(); }}>
-                <IconCamera className="h-3.5 w-3.5 mr-1" />Kamera
+                <IconCamera className="h-3.5 w-3.5 mr-1" />{t('scan_camera_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}>
-                <IconUpload className="h-3.5 w-3.5 mr-1" />Foto wählen
+                <IconUpload className="h-3.5 w-3.5 mr-1" />{t('scan_file_btn')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-10 text-xs" disabled={scanning}
                 onClick={e => {
@@ -907,13 +926,13 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                     setTimeout(() => { if (fileInputRef.current) fileInputRef.current.accept = 'image/*,application/pdf'; }, 100);
                   }
                 }}>
-                <IconFileText className="h-3.5 w-3.5 mr-1" />Dokument
+                <IconFileText className="h-3.5 w-3.5 mr-1" />{t('scan_doc_btn')}
               </Button>
             </div>
 
             <div className="relative">
               <Textarea
-                placeholder="Text eingeben oder einfügen, z.B. Notizen, E-Mails, Beschreibungen..."
+                placeholder={t('scan_text_placeholder')}
                 value={aiText}
                 onChange={e => {
                   setAiText(e.target.value);
@@ -941,7 +960,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                     if (text) setAiText(prev => prev ? prev + '\n' + text : text);
                   } catch {}
                 }}
-                title="Paste"
+                title={t('paste')}
               >
                 <IconClipboard className="h-4 w-4" />
               </button>
@@ -955,7 +974,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
                 disabled={scanning}
                 onClick={() => handleAiExtract()}
               >
-                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />Analysieren
+                <IconSparkles className="h-3.5 w-3.5 mr-1.5" />{t('scan_text_analyze')}
               </Button>
             )}
           </div>
@@ -1050,7 +1069,7 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
             {showErrors && missingRequired.length > 0 && (
               <p className="text-xs text-destructive flex items-center gap-1.5" role="alert">
                 <IconAlertCircle className="h-3.5 w-3.5 shrink-0" />
-                Bitte fülle die markierten Pflichtfelder aus.
+                {t('missing_required')}
               </p>
             )}
             {recordId && (
@@ -1066,13 +1085,13 @@ export function BilderfassungDialog({ open, onClose, onSubmit, defaultValues, re
             </div>
           )}
           <DialogFooter className="sticky bottom-0 border-t bg-background/95 backdrop-blur px-6 py-3 gap-2 max-sm:flex-row">
-            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">Abbrechen</Button>
+            <Button type="button" variant="outline" onClick={onClose} className="max-sm:h-12 max-sm:flex-1 max-sm:text-base">{t('cancel')}</Button>
             <Button
               type="submit"
               className="max-sm:h-12 max-sm:flex-1 max-sm:text-base"
               disabled={saving || !isDirty || (showErrors && missingRequired.length > 0)}
             >
-              {saving ? 'Speichern...' : defaultValues ? 'Speichern' : 'Erstellen'}
+              {saving ? t('saving') : defaultValues ? t('save') : t('create')}
             </Button>
           </DialogFooter>
         </form>

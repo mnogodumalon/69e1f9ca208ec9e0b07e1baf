@@ -21,6 +21,7 @@ import {
   IconCalendar, IconStar, IconX, IconChevronRight,
   IconBrain, IconCircleCheck, IconCircleX
 } from '@tabler/icons-react';
+import { tx } from '@/i18n';
 
 const APPGROUP_ID = '69e1f9ca208ec9e0b07e1baf';
 const REPAIR_ENDPOINT = '/claude/build/repair';
@@ -115,27 +116,27 @@ export default function DashboardOverview() {
       {/* KPI Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
-          title="Kameras gesamt"
+          title={tx('Kameras gesamt')}
           value={String(webkameraVerwaltung.length)}
-          description="Registriert"
+          description={tx('Registriert')}
           icon={<IconCamera size={18} className="text-muted-foreground" />}
         />
         <StatCard
-          title="Aktiv"
+          title={tx('Aktiv')}
           value={String(aktiveKameras)}
-          description="Online"
+          description={tx('Online')}
           icon={<IconWifi size={18} className="text-muted-foreground" />}
         />
         <StatCard
-          title="Aufnahmen"
+          title={tx('Aufnahmen')}
           value={String(enrichedBilderfassung.length)}
-          description="Gesamt"
+          description={tx('Gesamt')}
           icon={<IconPhoto size={18} className="text-muted-foreground" />}
         />
         <StatCard
-          title="Kriterium erfüllt"
+          title={tx('Kriterium erfüllt')}
           value={String(kriteriumErfuellt)}
-          description="KI-Auswertungen"
+          description={tx('KI-Auswertungen')}
           icon={<IconBrain size={18} className="text-muted-foreground" />}
         />
       </div>
@@ -146,16 +147,16 @@ export default function DashboardOverview() {
         {/* LEFT: Kamera-Liste */}
         <div className="rounded-[20px] bg-card shadow-sm border border-border overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/40">
-            <h2 className="font-semibold text-sm text-foreground">Kameras</h2>
+            <h2 className="font-semibold text-sm text-foreground">{tx('Kameras')}</h2>
             <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setEditKamera(null); setKameraDialogOpen(true); }}>
-              <IconPlus size={13} className="shrink-0" /> Neu
+              <IconPlus size={13} className="shrink-0" /> {tx('Neu')}
             </Button>
           </div>
           <div className="divide-y divide-border">
             {webkameraVerwaltung.length === 0 && (
               <div className="flex flex-col items-center py-10 gap-2 text-muted-foreground">
                 <IconCamera size={32} stroke={1.5} />
-                <p className="text-sm">Noch keine Kameras</p>
+                <p className="text-sm">{tx('Noch keine Kameras')}</p>
               </div>
             )}
             {/* "Alle" filter */}
@@ -168,8 +169,8 @@ export default function DashboardOverview() {
                   <IconEye size={14} className="text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">Alle Aufnahmen</p>
-                  <p className="text-xs text-muted-foreground">{enrichedBilderfassung.length} Bilder</p>
+                  <p className="text-sm font-medium truncate">{tx('Alle Aufnahmen')}</p>
+                  <p className="text-xs text-muted-foreground">{enrichedBilderfassung.length} {tx('Bilder')}</p>
                 </div>
                 {!selectedKamera && <IconChevronRight size={14} className="text-primary shrink-0" />}
               </button>
@@ -223,8 +224,8 @@ export default function DashboardOverview() {
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-secondary/40 flex-wrap gap-2">
             <div className="min-w-0">
               <h2 className="font-semibold text-sm text-foreground truncate">
-                {selectedKamera ? selectedKamera.fields.kamera_name ?? 'Aufnahmen' : 'Alle Aufnahmen'}
-                <span className="ml-2 text-xs font-normal text-muted-foreground">(neueste 10)</span>
+                {selectedKamera ? selectedKamera.fields.kamera_name ?? tx('Aufnahmen') : tx('Alle Aufnahmen')}
+                <span className="ml-2 text-xs font-normal text-muted-foreground">{tx('(neueste 10)')}</span>
               </h2>
               {selectedKamera?.fields.kamera_standort && (
                 <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
@@ -236,11 +237,11 @@ export default function DashboardOverview() {
             <div className="flex items-center gap-2 shrink-0">
               {selectedKamera && (
                 <Badge className={`text-xs border ${statusColor(selectedKamera.fields.kamera_status)}`} variant="outline">
-                  {selectedKamera.fields.kamera_status?.label ?? 'Unbekannt'}
+                  {selectedKamera.fields.kamera_status?.label ?? tx('Unbekannt')}
                 </Badge>
               )}
               <Button size="sm" className="h-7 text-xs gap-1" onClick={() => { setEditBild(null); setBildDialogOpen(true); }}>
-                <IconPlus size={13} className="shrink-0" /> Aufnahme
+                <IconPlus size={13} className="shrink-0" /> {tx('Aufnahme')}
               </Button>
             </div>
           </div>
@@ -248,9 +249,9 @@ export default function DashboardOverview() {
           {filteredBilder.length === 0 ? (
             <div className="flex flex-col items-center py-16 gap-3 text-muted-foreground">
               <IconPhoto size={40} stroke={1.5} />
-              <p className="text-sm">Noch keine Aufnahmen</p>
+              <p className="text-sm">{tx('Noch keine Aufnahmen')}</p>
               <Button variant="outline" size="sm" onClick={() => { setEditBild(null); setBildDialogOpen(true); }}>
-                <IconPlus size={14} className="mr-1" /> Erste Aufnahme hinzufügen
+                <IconPlus size={14} className="mr-1" /> {tx('Erste Aufnahme hinzufügen')}
               </Button>
             </div>
           ) : (
@@ -266,7 +267,7 @@ export default function DashboardOverview() {
                     {bild.fields.bild_datei ? (
                       <img
                         src={bild.fields.bild_datei}
-                        alt={bild.fields.bild_notiz ?? 'Aufnahme'}
+                        alt={bild.fields.bild_notiz ?? tx('Aufnahme')}
                         className="w-full h-full object-cover"
                         onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
                       />
@@ -279,8 +280,8 @@ export default function DashboardOverview() {
                     {bild.fields.ki_kriterium_erfuellt !== undefined && bild.fields.ki_kriterium_erfuellt !== null && (
                       <div className="absolute top-1.5 right-1.5">
                         {bild.fields.ki_kriterium_erfuellt
-                          ? <span className="flex items-center gap-0.5 bg-green-500 text-white text-[10px] font-semibold rounded-full px-1.5 py-0.5"><IconCircleCheck size={10} /> OK</span>
-                          : <span className="flex items-center gap-0.5 bg-red-500 text-white text-[10px] font-semibold rounded-full px-1.5 py-0.5"><IconCircleX size={10} /> NOK</span>
+                          ? <span className="flex items-center gap-0.5 bg-green-500 text-white text-[10px] font-semibold rounded-full px-1.5 py-0.5"><IconCircleCheck size={10} /> {tx('OK')}</span>
+                          : <span className="flex items-center gap-0.5 bg-red-500 text-white text-[10px] font-semibold rounded-full px-1.5 py-0.5"><IconCircleX size={10} /> {tx('NOK')}</span>
                         }
                       </div>
                     )}
@@ -296,7 +297,7 @@ export default function DashboardOverview() {
                   {/* Info */}
                   <div className="p-2">
                     <p className="text-xs font-medium text-foreground truncate">
-                      {bild.kamera_referenzName || bild.fields.bild_notiz || 'Aufnahme'}
+                      {bild.kamera_referenzName || bild.fields.bild_notiz || tx('Aufnahme')}
                     </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
                       <IconCalendar size={9} />
@@ -309,13 +310,13 @@ export default function DashboardOverview() {
                       className="flex-1 py-1.5 flex items-center justify-center gap-1 text-[10px] text-muted-foreground hover:bg-muted/50 transition-colors"
                       onClick={e => { e.stopPropagation(); setEditBild(bild); setBildDialogOpen(true); }}
                     >
-                      <IconPencil size={10} /> Bearbeiten
+                      <IconPencil size={10} /> {tx('Bearbeiten')}
                     </button>
                     <button
                       className="flex-1 py-1.5 flex items-center justify-center gap-1 text-[10px] text-destructive hover:bg-destructive/5 transition-colors border-l border-border"
                       onClick={e => { e.stopPropagation(); setDeleteBild(bild); }}
                     >
-                      <IconTrash size={10} /> Löschen
+                      <IconTrash size={10} /> {tx('Löschen')}
                     </button>
                   </div>
                 </div>
@@ -337,14 +338,14 @@ export default function DashboardOverview() {
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-border">
               <div>
-                <h3 className="font-semibold text-base">{detailBild.kamera_referenzName || 'Aufnahme'}</h3>
+                <h3 className="font-semibold text-base">{detailBild.kamera_referenzName || tx('Aufnahme')}</h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {detailBild.fields.aufnahmezeitpunkt ? formatDate(detailBild.fields.aufnahmezeitpunkt) : '—'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => { setDetailBild(null); setEditBild(detailBild); setBildDialogOpen(true); }}>
-                  <IconPencil size={12} /> Bearbeiten
+                  <IconPencil size={12} /> {tx('Bearbeiten')}
                 </Button>
                 <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setDetailBild(null)}>
                   <IconX size={16} />
@@ -360,7 +361,7 @@ export default function DashboardOverview() {
               <div className="grid grid-cols-2 gap-3 text-sm">
                 {detailBild.fields.bild_qualitaet && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Bildqualität</p>
+                    <p className="text-xs text-muted-foreground mb-1">{tx('Bildqualität')}</p>
                     <span className={`inline-block text-xs font-medium rounded-full px-2 py-0.5 ${qualityColor(detailBild.fields.bild_qualitaet.key)}`}>
                       {detailBild.fields.bild_qualitaet.label}
                     </span>
@@ -368,15 +369,15 @@ export default function DashboardOverview() {
                 )}
                 {detailBild.fields.ki_kriterium_erfuellt !== undefined && detailBild.fields.ki_kriterium_erfuellt !== null && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Kriterium erfüllt</p>
+                    <p className="text-xs text-muted-foreground mb-1">{tx('Kriterium erfüllt')}</p>
                     <span className={`inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 ${detailBild.fields.ki_kriterium_erfuellt ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                      {detailBild.fields.ki_kriterium_erfuellt ? <><IconCircleCheck size={11} /> Ja</> : <><IconCircleX size={11} /> Nein</>}
+                      {detailBild.fields.ki_kriterium_erfuellt ? <><IconCircleCheck size={11} /> {tx('Ja')}</> : <><IconCircleX size={11} /> {tx('Nein')}</>}
                     </span>
                   </div>
                 )}
                 {detailBild.fields.ki_messwert !== undefined && detailBild.fields.ki_messwert !== null && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Messwert</p>
+                    <p className="text-xs text-muted-foreground mb-1">{tx('Messwert')}</p>
                     <span className="inline-flex items-center gap-1 text-xs font-medium">
                       <IconStar size={11} className="text-amber-500" />
                       {detailBild.fields.ki_messwert}
@@ -386,19 +387,19 @@ export default function DashboardOverview() {
               </div>
               {detailBild.fields.bild_notiz && (
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">Notiz</p>
+                  <p className="text-xs text-muted-foreground mb-1">{tx('Notiz')}</p>
                   <p className="text-sm bg-muted/50 rounded-lg p-3">{detailBild.fields.bild_notiz}</p>
                 </div>
               )}
               {detailBild.fields.ki_auswertung && (
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><IconBrain size={11} /> KI-Auswertung</p>
+                  <p className="text-xs text-muted-foreground mb-1 flex items-center gap-1"><IconBrain size={11} /> {tx('KI-Auswertung')}</p>
                   <p className="text-sm bg-primary/5 border border-primary/10 rounded-lg p-3">{detailBild.fields.ki_auswertung}</p>
                 </div>
               )}
               {detailBild.fields.ki_prompt && (
                 <div>
-                  <p className="text-xs text-muted-foreground mb-1">KI-Prompt</p>
+                  <p className="text-xs text-muted-foreground mb-1">{tx('KI-Prompt')}</p>
                   <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-2 font-mono">{detailBild.fields.ki_prompt}</p>
                 </div>
               )}
@@ -457,8 +458,8 @@ export default function DashboardOverview() {
       {/* Confirm Delete Kamera */}
       <ConfirmDialog
         open={!!deleteKamera}
-        title="Kamera löschen"
-        description={`Soll die Kamera "${deleteKamera?.fields.kamera_name ?? ''}" wirklich gelöscht werden?`}
+        title={tx('Kamera löschen')}
+        description={tx`Soll die Kamera "${deleteKamera?.fields.kamera_name ?? ''}" wirklich gelöscht werden?`}
         onConfirm={handleDeleteKamera}
         onClose={() => setDeleteKamera(null)}
       />
@@ -466,8 +467,8 @@ export default function DashboardOverview() {
       {/* Confirm Delete Bild */}
       <ConfirmDialog
         open={!!deleteBild}
-        title="Aufnahme löschen"
-        description="Soll diese Aufnahme wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={tx('Aufnahme löschen')}
+        description={tx('Soll diese Aufnahme wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden.')}
         onConfirm={handleDeleteBild}
         onClose={() => setDeleteBild(null)}
       />
@@ -497,7 +498,7 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
 
   const handleRepair = async () => {
     setRepairing(true);
-    setRepairStatus('Reparatur wird gestartet...');
+    setRepairStatus(tx('Reparatur wird gestartet...'));
     setRepairFailed(false);
     const errorContext = JSON.stringify({
       type: 'data_loading',
@@ -528,7 +529,7 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
           const content = line.slice(6);
           if (content.startsWith('[STATUS]')) setRepairStatus(content.replace(/^\[STATUS]\s*/, ''));
           if (content.startsWith('[DONE]')) { setRepairDone(true); setRepairing(false); }
-          if (content.startsWith('[ERROR]') && !content.includes('Dashboard-Links')) setRepairFailed(true);
+          if (content.startsWith('[ERROR]') && !content.includes('Dashboard-Links')) setRepairFailed(true); /* i18n-exempt */
         }
       }
     } catch { setRepairing(false); setRepairFailed(true); }
@@ -541,11 +542,11 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
           <IconCheck size={22} className="text-green-500" />
         </div>
         <div className="text-center">
-          <h3 className="font-semibold text-foreground mb-1">Dashboard repariert</h3>
-          <p className="text-sm text-muted-foreground max-w-xs">Das Problem wurde behoben. Bitte laden Sie die Seite neu.</p>
+          <h3 className="font-semibold text-foreground mb-1">{tx('Dashboard repariert')}</h3>
+          <p className="text-sm text-muted-foreground max-w-xs">{tx('Das Problem wurde behoben. Bitte laden Sie die Seite neu.')}</p>
         </div>
         <Button size="sm" onClick={() => window.location.reload()}>
-          <IconRefresh size={14} className="mr-1" />Neu laden
+          <IconRefresh size={14} className="mr-1" />{tx('Neu laden')}
         </Button>
       </div>
     );
@@ -557,19 +558,19 @@ function DashboardError({ error, onRetry }: { error: Error; onRetry: () => void 
         <IconAlertCircle size={22} className="text-destructive" />
       </div>
       <div className="text-center">
-        <h3 className="font-semibold text-foreground mb-1">Fehler beim Laden</h3>
+        <h3 className="font-semibold text-foreground mb-1">{tx('Fehler beim Laden')}</h3>
         <p className="text-sm text-muted-foreground max-w-xs">{repairing ? repairStatus : error.message}</p>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={onRetry} disabled={repairing}>Erneut versuchen</Button>
+        <Button variant="outline" size="sm" onClick={onRetry} disabled={repairing}>{tx('Erneut versuchen')}</Button>
         <Button size="sm" onClick={handleRepair} disabled={repairing}>
           {repairing
             ? <span className="inline-block w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin mr-1" />
             : <IconTool size={14} className="mr-1" />}
-          {repairing ? 'Reparatur läuft...' : 'Dashboard reparieren'}
+          {repairing ? tx('Reparatur läuft...') : tx('Dashboard reparieren')}
         </Button>
       </div>
-      {repairFailed && <p className="text-sm text-destructive">Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.</p>}
+      {repairFailed && <p className="text-sm text-destructive">{tx('Automatische Reparatur fehlgeschlagen. Bitte kontaktieren Sie den Support.')}</p>}
     </div>
   );
 }

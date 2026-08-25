@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { WebkameraVerwaltung, Bilderfassung } from '@/types/app';
 import { LivingAppsService } from '@/services/livingAppsService';
+import { t } from '@/i18n';
 
 /** Dashboard data + the OPTIMISTIC-WRITE API.
  *
@@ -28,7 +29,7 @@ export function useDashboardData() {
       setWebkameraVerwaltung(webkameraVerwaltungData);
       setBilderfassung(bilderfassungData);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error('Fehler beim Laden der Daten'));
+      setError(err instanceof Error ? err : new Error(t('data_load_failed')));
     } finally {
       setLoading(false);
     }
@@ -51,8 +52,12 @@ export function useDashboardData() {
       }
     }
     function handleRefresh() { void silentRefresh(); }
-    window.addEventListener('dashboard-refresh', handleRefresh);
-    return () => window.removeEventListener('dashboard-refresh', handleRefresh);
+    // assistant:data-changed comes from the assistant (<la-klar-assistant>)
+    // after every mutation. The element additionally fires the legacy
+    // dashboard-refresh event for OLD deployed bundles — do NOT subscribe to
+    // both here, or every mutation fetches twice.
+    window.addEventListener('assistant:data-changed', handleRefresh);
+    return () => window.removeEventListener('assistant:data-changed', handleRefresh);
   }, []);
 
   const webkameraVerwaltungMap = useMemo(() => {

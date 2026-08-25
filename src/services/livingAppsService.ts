@@ -1,5 +1,6 @@
 // AUTOMATICALLY GENERATED SERVICE
 import { APP_IDS, LOOKUP_OPTIONS, FIELD_TYPES } from '@/types/app';
+import { ensureUploadableImage } from '@/lib/ai';
 import type { WebkameraVerwaltung, Bilderfassung, CreateWebkameraVerwaltung, CreateBilderfassung } from '@/types/app';
 
 // Base Configuration
@@ -13,20 +14,117 @@ export function extractRecordId(url: unknown): string | null {
   return match ? match[1] : null;
 }
 
+// multipleapplookup form-state is Array<URL>. The MultiCombobox picker
+// works on record-ids; this helper maps a raw form value (which may be
+// undefined, null, a single URL string from a legacy single-Combobox
+// render, or the expected URL array) to a clean string[] of ids.
+export function extractRecordIds(urls: unknown): string[] {
+  if (!urls) return [];
+  const arr = Array.isArray(urls) ? urls : [urls];
+  const out: string[] = [];
+  for (const u of arr) {
+    const id = extractRecordId(u);
+    if (id) out.push(id);
+  }
+  return out;
+}
+
 export function createRecordUrl(appId: string, recordId: string): string {
   return `https://my.living-apps.de/rest/apps/${appId}/records/${recordId}`;
 }
 
-async function callApi(method: string, endpoint: string, data?: any) {
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',  // Nutze Session Cookies für Auth
-    body: data ? JSON.stringify(data) : undefined
-  });
+export class LivingAppsApiError extends Error {
+  status: number;
+  type?: string;
+  control_identifier?: string;
+  control_type?: string;
+  field_type?: string;
+  detail?: string;
+  constructor(message: string, status: number, raw?: Record<string, unknown>) {
+    super(message);
+    this.name = 'LivingAppsApiError';
+    this.status = status;
+    if (raw) {
+      this.type = typeof raw.type === 'string' ? raw.type : undefined;
+      this.control_identifier = typeof raw.control_identifier === 'string' ? raw.control_identifier : undefined;
+      this.control_type = typeof raw.control_type === 'string' ? raw.control_type : undefined;
+      this.field_type = typeof raw.field_type === 'string' ? raw.field_type : undefined;
+      this.detail = typeof raw.detail === 'string' ? raw.detail : undefined;
+    }
+  }
+}
+
+async function parseErrorBody(response: Response): Promise<{ message: string; raw?: Record<string, unknown> }> {
+  const text = await response.text();
+  if (!text) return { message: `HTTP ${response.status}` };
+  try {
+    const raw = JSON.parse(text);
+    if (raw && typeof raw === 'object') {
+      const obj = raw as Record<string, unknown>;
+      const message = typeof obj.detail === 'string' ? obj.detail
+        : typeof obj.title === 'string' ? obj.title
+        : text;
+      return { message, raw: obj };
+    }
+  } catch { /* fall through to text */ }
+  return { message: text };
+}
+
+export interface CallApiOptions {
+  /** Skip errorbus dispatch for expected failures (e.g. optional-param 404s). */
+  silent?: boolean;
+}
+
+/** What the create and update helpers resolve to. Same `record_id`
+ *  the read helpers expose, so the whole family behaves alike — the
+ *  raw REST answer only
+ *  carries `id`, and code that guessed (e.g. Object.keys(res)[0]) built
+ *  `/records/id` and got a 400 on the next write. */
+export interface MutationResult {
+  record_id: string;
+  id: string;
+  fields: Record<string, any>;
+  [key: string]: any;
+}
+
+async function callApi(method: string, endpoint: string, data?: any, options?: CallApiOptions) {
+  const silent = options?.silent === true;
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',  // Nutze Session Cookies für Auth
+      body: data ? JSON.stringify(data) : undefined
+    });
+  } catch (netErr) {
+    const message = netErr instanceof Error ? netErr.message : String(netErr);
+    if (!silent) {
+      window.dispatchEvent(new CustomEvent('errorbus:emit', { detail: {
+        source: 'network', message, status: 0,
+      } }));
+    }
+    throw netErr;
+  }
   if (!response.ok) {
-    if (response.status === 401 || response.status === 403) window.dispatchEvent(new Event('auth-error'));
-    throw new Error(await response.text());
+    // 401/403 go to the login screen only — never to the errorbus (repair can't fix auth).
+    const isAuthError = response.status === 401 || response.status === 403;
+    if (isAuthError) window.dispatchEvent(new Event('auth-error'));
+    const { message, raw } = await parseErrorBody(response);
+    const err = new LivingAppsApiError(message, response.status, raw);
+    if (!silent && !isAuthError) {
+      window.dispatchEvent(new CustomEvent('errorbus:emit', { detail: {
+        source: 'api',
+        status: err.status,
+        type: err.type,
+        control_identifier: err.control_identifier,
+        control_type: err.control_type,
+        field_type: err.field_type,
+        detail: err.detail,
+        message: err.message,
+      } }));
+    }
+    throw err;
   }
   // DELETE returns often empty body or simple status
   if (method === 'DELETE') return true;
@@ -35,6 +133,10 @@ async function callApi(method: string, endpoint: string, data?: any) {
 
 /** Upload a file to LivingApps. Returns the file URL for use in record fields. */
 export async function uploadFile(file: File | Blob, filename?: string): Promise<string> {
+  // HEIC/HEIF (iPhone photos) crash the server-side image decoder (500).
+  // Convert to JPEG in the browser BEFORE upload — every upload path routes
+  // through here, so this one guard covers form fields AND attachments.
+  if (file instanceof File) file = await ensureUploadableImage(file);
   const formData = new FormData();
   formData.append('file', file, filename ?? (file instanceof File ? file.name : 'upload'));
   const res = await fetch(`${API_BASE_URL}/files`, {
@@ -48,6 +150,27 @@ export async function uploadFile(file: File | Blob, filename?: string): Promise<
   }
   const data = await res.json();
   return data.url;
+}
+
+// --- ATTACHMENT API ---
+// Record-attachments: file/note/url/json blobs attached to a single record.
+// `getAttachments` returns a dict keyed by attachment id; we flatten to an array.
+export async function getRecordAttachments(appId: string, recordId: string) {
+  const data = await callApi('GET', `/apps/${appId}/records/${recordId}/attachments`, undefined, { silent: true }).catch(() => ({}));
+  if (!data || typeof data !== 'object') return [] as import('@/types/app').Attachment[];
+  return Object.entries(data).map(([id, att]) => ({ id, ...(att as Record<string, unknown>) })) as import('@/types/app').Attachment[];
+}
+
+export async function createRecordAttachment(appId: string, recordId: string, input: import('@/types/app').AttachmentInput) {
+  return callApi('POST', `/apps/${appId}/records/${recordId}/attachments`, input) as Promise<import('@/types/app').Attachment>;
+}
+
+export async function updateRecordAttachment(appId: string, recordId: string, attachmentId: string, input: Partial<import('@/types/app').AttachmentInput>) {
+  return callApi('PATCH', `/apps/${appId}/records/${recordId}/attachments/${attachmentId}`, input) as Promise<import('@/types/app').Attachment>;
+}
+
+export async function deleteRecordAttachment(appId: string, recordId: string, attachmentId: string) {
+  return callApi('DELETE', `/apps/${appId}/records/${recordId}/attachments/${attachmentId}`);
 }
 
 function enrichLookupFields<T extends { fields: Record<string, unknown> }>(
@@ -76,12 +199,85 @@ function enrichLookupFields<T extends { fields: Record<string, unknown> }>(
   });
 }
 
+/** A textarea that HOLDS A LIST but was typed on one line.
+ *
+ *  Rendering such a field as tiles/bullets is the natural thing to do, and
+ *  the natural way to write it is `value.split('\n')` — one item per line
+ *  is the convention every form implies. Owners type differently though:
+ *  a live landing page collapsed five services into ONE tile because the
+ *  record held 'Tagesbetreuung, Übernachtung, …' without a single line
+ *  break. Normalizing HERE makes that natural split correct whatever was
+ *  typed, instead of asking every page to re-derive the heuristic.
+ *
+ *  Deliberately conservative — prose must survive untouched:
+ *    · already has line breaks  → left alone (the author's own structure)
+ *    · ; • · |                  → unambiguous separators, 2 parts suffice
+ *    · commas                   → only with 3+ parts that all read like
+ *                                 labels: short, at most four words, no
+ *                                 sentence punctuation. A prose clause like
+ *                                 "Katzen und Kleintiere aller Rassen" is
+ *                                 short enough but not wordy-short.
+ *  Anything else stays as it is, so a wrong guess degrades to today's
+ *  behaviour (one item), never to mangled prose. */
+const LIST_LABEL_MAX = 40;
+const LIST_LABEL_MAX_WORDS = 4;
+function listTextToLines(text: string): string {
+  if (!text || /\r?\n/.test(text)) return text;
+  const bulleted = text.split(/\s*[;•·|]\s*/).map(s => s.trim()).filter(Boolean);
+  if (bulleted.length >= 2) return bulleted.join('\n');
+  const parts = text.split(/\s*,\s*/).map(s => s.trim()).filter(Boolean);
+  const looksLikeLabels = parts.length >= 3 && parts.every(p =>
+    p.length <= LIST_LABEL_MAX
+    && p.split(/\s+/).length <= LIST_LABEL_MAX_WORDS
+    && !/[.!?:]$/.test(p));
+  return looksLikeLabels ? parts.join('\n') : text;
+}
+
+function normalizeListTextareas<T extends { fields: Record<string, unknown> }>(
+  records: T[], entityKey: string
+): T[] {
+  const types = FIELD_TYPES[entityKey];
+  if (!types) return records;
+  const areas = Object.keys(types).filter(k => types[k] === 'string/textarea');
+  if (areas.length === 0) return records;
+  return records.map(r => {
+    let touched = false;
+    const fields = { ...r.fields };
+    for (const key of areas) {
+      const val = fields[key];
+      if (typeof val !== 'string') continue;
+      const next = listTextToLines(val);
+      if (next !== val) { fields[key] = next; touched = true; }
+    }
+    return touched ? ({ ...r, fields } as T) : r;
+  });
+}
+
+/** The one post-processing step every READ goes through: lookup objects
+ *  attached, list-ish textareas line-broken. Read helpers call this, not
+ *  the individual passes. */
+function hydrateRecords<T extends { fields: Record<string, unknown> }>(
+  records: T[], entityKey: string
+): T[] {
+  return normalizeListTextareas(enrichLookupFields(records, entityKey), entityKey);
+}
+
 /** Normalize fields for API writes: strip lookup objects to keys, fix date formats. */
 export function cleanFieldsForApi(
   fields: Record<string, unknown>,
   entityKey: string
 ): Record<string, unknown> {
   const clean: Record<string, unknown> = { ...fields };
+  // Strip virtual / unknown keys before they hit the API. Sub-agent invents
+  // computed-only keys (e.g. `_netto`, `_bestellung_gesamtbetrag`) for the
+  // 'Berechnungen' display, and a leaky submit-backfill would otherwise send
+  // them to the Living-Apps backend which rejects with 'field does not exist'.
+  const known = FIELD_TYPES[entityKey];
+  if (known) {
+    for (const k of Object.keys(clean)) {
+      if (!(k in known)) delete clean[k];
+    }
+  }
   for (const [k, v] of Object.entries(clean)) {
     if (v && typeof v === 'object' && !Array.isArray(v) && 'key' in v) clean[k] = (v as any).key;
     if (Array.isArray(v)) clean[k] = v.map((item: any) => item && typeof item === 'object' && 'key' in item ? item.key : item);
@@ -165,7 +361,9 @@ export async function getAppGroups(): Promise<AppGroupInfo[]> {
         id: g.id,
         name: g.name,
         image: g.image ?? null,
-        createdat: g.createdat ?? '',
+        // API field is created_at (snake_case) — the old camelCase read
+        // left every group '', silently disabling the newest-first sort.
+        createdat: g.created_at ?? g.createdat ?? '',
         href: `/gateway/apps/${firstAppId}?template=list_page`,
         _firstAppId: firstAppId,
       };
@@ -174,7 +372,7 @@ export async function getAppGroups(): Promise<AppGroupInfo[]> {
 
   // Check which appgroups have a deployed dashboard via app params
   const paramChecks = await Promise.allSettled(
-    groups.map(g => callApi('GET', `/apps/${(g as any)._firstAppId}/params/la_page_header_additional_url`))
+    groups.map(g => callApi('GET', `/apps/${(g as any)._firstAppId}/params/la_page_header_additional_url`, undefined, { silent: true }))
   );
   paramChecks.forEach((result, i) => {
     if (result.status !== 'fulfilled' || !result.value) return;
@@ -196,20 +394,23 @@ export class LivingAppsService {
   static async getWebkameraVerwaltung(): Promise<WebkameraVerwaltung[]> {
     const data = await callApi('GET', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records`);
     const records = Object.entries(data).map(([id, rec]: [string, any]) => ({
-      record_id: id, ...rec
+      record_id: id, ...rec,
+      createdat: rec.created_at ?? '', updatedat: rec.updated_at ?? null,
     })) as WebkameraVerwaltung[];
-    return enrichLookupFields(records, 'webkamera_verwaltung');
+    return hydrateRecords(records, 'webkamera_verwaltung');
   }
   static async getWebkameraVerwaltungEntry(id: string): Promise<WebkameraVerwaltung | undefined> {
     const data = await callApi('GET', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records/${id}`);
-    const record = { record_id: data.id, ...data } as WebkameraVerwaltung;
-    return enrichLookupFields([record], 'webkamera_verwaltung')[0];
+    const record = { record_id: data.id, ...data, createdat: data.created_at ?? '', updatedat: data.updated_at ?? null } as WebkameraVerwaltung;
+    return hydrateRecords([record], 'webkamera_verwaltung')[0];
   }
-  static async createWebkameraVerwaltungEntry(fields: CreateWebkameraVerwaltung) {
-    return callApi('POST', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records`, { fields: cleanFieldsForApi(fields as any, 'webkamera_verwaltung') });
+  static async createWebkameraVerwaltungEntry(fields: CreateWebkameraVerwaltung): Promise<MutationResult> {
+    const data = await callApi('POST', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records`, { fields: cleanFieldsForApi(fields as any, 'webkamera_verwaltung') });
+    return { ...data, record_id: data.id };
   }
-  static async updateWebkameraVerwaltungEntry(id: string, fields: Partial<CreateWebkameraVerwaltung>) {
-    return callApi('PATCH', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'webkamera_verwaltung') });
+  static async updateWebkameraVerwaltungEntry(id: string, fields: Partial<CreateWebkameraVerwaltung>): Promise<MutationResult> {
+    const data = await callApi('PATCH', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'webkamera_verwaltung') });
+    return { ...data, record_id: data.id };
   }
   static async deleteWebkameraVerwaltungEntry(id: string) {
     return callApi('DELETE', `/apps/${APP_IDS.WEBKAMERA_VERWALTUNG}/records/${id}`);
@@ -219,20 +420,23 @@ export class LivingAppsService {
   static async getBilderfassung(): Promise<Bilderfassung[]> {
     const data = await callApi('GET', `/apps/${APP_IDS.BILDERFASSUNG}/records`);
     const records = Object.entries(data).map(([id, rec]: [string, any]) => ({
-      record_id: id, ...rec
+      record_id: id, ...rec,
+      createdat: rec.created_at ?? '', updatedat: rec.updated_at ?? null,
     })) as Bilderfassung[];
-    return enrichLookupFields(records, 'bilderfassung');
+    return hydrateRecords(records, 'bilderfassung');
   }
   static async getBilderfassungEntry(id: string): Promise<Bilderfassung | undefined> {
     const data = await callApi('GET', `/apps/${APP_IDS.BILDERFASSUNG}/records/${id}`);
-    const record = { record_id: data.id, ...data } as Bilderfassung;
-    return enrichLookupFields([record], 'bilderfassung')[0];
+    const record = { record_id: data.id, ...data, createdat: data.created_at ?? '', updatedat: data.updated_at ?? null } as Bilderfassung;
+    return hydrateRecords([record], 'bilderfassung')[0];
   }
-  static async createBilderfassungEntry(fields: CreateBilderfassung) {
-    return callApi('POST', `/apps/${APP_IDS.BILDERFASSUNG}/records`, { fields: cleanFieldsForApi(fields as any, 'bilderfassung') });
+  static async createBilderfassungEntry(fields: CreateBilderfassung): Promise<MutationResult> {
+    const data = await callApi('POST', `/apps/${APP_IDS.BILDERFASSUNG}/records`, { fields: cleanFieldsForApi(fields as any, 'bilderfassung') });
+    return { ...data, record_id: data.id };
   }
-  static async updateBilderfassungEntry(id: string, fields: Partial<CreateBilderfassung>) {
-    return callApi('PATCH', `/apps/${APP_IDS.BILDERFASSUNG}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'bilderfassung') });
+  static async updateBilderfassungEntry(id: string, fields: Partial<CreateBilderfassung>): Promise<MutationResult> {
+    const data = await callApi('PATCH', `/apps/${APP_IDS.BILDERFASSUNG}/records/${id}`, { fields: cleanFieldsForApi(fields as any, 'bilderfassung') });
+    return { ...data, record_id: data.id };
   }
   static async deleteBilderfassungEntry(id: string) {
     return callApi('DELETE', `/apps/${APP_IDS.BILDERFASSUNG}/records/${id}`);

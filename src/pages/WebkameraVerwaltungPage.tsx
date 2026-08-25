@@ -15,6 +15,7 @@ import { WebkameraVerwaltungDialog } from '@/components/dialogs/WebkameraVerwalt
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
+import { t, appLabel, fieldLabel, lookupLabel } from '@/i18n';
 
 export default function WebkameraVerwaltungPage() {
   const navigate = useNavigate();
@@ -100,18 +101,18 @@ export default function WebkameraVerwaltungPage() {
 
   return (
     <PageShell
-      title="Webkamera-Verwaltung"
-      subtitle={`${records.length} Webkamera-Verwaltung im System`}
+      title={appLabel('webkamera_verwaltung')}
+      subtitle={`${records.length} ${t('in_system', { entity: appLabel('webkamera_verwaltung') })}`}
       action={
         <Button onClick={() => setDialogOpen(true)} className="shrink-0 rounded-full shadow-sm">
-          <IconPlus className="h-4 w-4 mr-2" /> Hinzufügen
+          <IconPlus className="h-4 w-4 mr-2" /> {t('add')}
         </Button>
       }
     >
       <div className="relative w-full max-w-sm">
         <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Webkamera-Verwaltung suchen..."
+          placeholder={t('search_entity', { entity: appLabel('webkamera_verwaltung') })}
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="pl-9"
@@ -123,41 +124,41 @@ export default function WebkameraVerwaltungPage() {
             <TableRow className="border-b border-input">
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_name')}>
                 <span className="inline-flex items-center gap-1">
-                  Kameraname
+                  {fieldLabel('webkamera_verwaltung', 'kamera_name')}
                   {sortKey === 'kamera_name' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_standort')}>
                 <span className="inline-flex items-center gap-1">
-                  Standortbeschreibung
+                  {fieldLabel('webkamera_verwaltung', 'kamera_standort')}
                   {sortKey === 'kamera_standort' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_url')}>
                 <span className="inline-flex items-center gap-1">
-                  Stream-URL
+                  {fieldLabel('webkamera_verwaltung', 'kamera_url')}
                   {sortKey === 'kamera_url' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_geo')}>
                 <span className="inline-flex items-center gap-1">
-                  Geografischer Standort
+                  {fieldLabel('webkamera_verwaltung', 'kamera_geo')}
                   {sortKey === 'kamera_geo' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_beschreibung')}>
                 <span className="inline-flex items-center gap-1">
-                  Beschreibung
+                  {fieldLabel('webkamera_verwaltung', 'kamera_beschreibung')}
                   {sortKey === 'kamera_beschreibung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_status')}>
                 <span className="inline-flex items-center gap-1">
-                  Status
+                  {fieldLabel('webkamera_verwaltung', 'kamera_status')}
                   {sortKey === 'kamera_status' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
-              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">Aktionen</TableHead>
+              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -168,7 +169,7 @@ export default function WebkameraVerwaltungPage() {
                 <TableCell>{record.fields.kamera_url ?? '—'}</TableCell>
                 <TableCell className="max-w-[200px]"><span className="truncate block" title={record.fields.kamera_geo ? `${record.fields.kamera_geo.lat}, ${record.fields.kamera_geo.long}` : undefined}>{record.fields.kamera_geo?.info ?? (record.fields.kamera_geo ? `${record.fields.kamera_geo.lat?.toFixed(4)}, ${record.fields.kamera_geo.long?.toFixed(4)}` : '—')}</span></TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.kamera_beschreibung ?? '—'}</span></TableCell>
-                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.kamera_status?.label ?? '—'}</span></TableCell>
+                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{lookupLabel('webkamera_verwaltung', 'kamera_status', record.fields.kamera_status?.key) ?? record.fields.kamera_status?.label ?? '—'}</span></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => setEditingRecord(record)}>
@@ -184,7 +185,7 @@ export default function WebkameraVerwaltungPage() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
-                  {search ? 'Keine Ergebnisse gefunden.' : 'Noch keine Webkamera-Verwaltung. Jetzt hinzufügen!'}
+                  {search ? t('no_results') : t('no_data_yet', { entity: appLabel('webkamera_verwaltung') })}
                 </TableCell>
               </TableRow>
             )}
@@ -206,8 +207,8 @@ export default function WebkameraVerwaltungPage() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Webkamera-Verwaltung löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('webkamera_verwaltung') })}
+        description={t('confirm_delete_desc')}
       />
 
     </PageShell>

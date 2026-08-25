@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { IconPencil, IconChevronDown } from '@tabler/icons-react';
 import { GeoMapPicker } from '@/components/GeoMapPicker';
 import { MapRouteLinks } from '@/components/widgets/MapWidget';
+import { t, appLabel, fieldLabel, lookupLabel } from '@/i18n';
 
 interface WebkameraVerwaltungViewDialogProps {
   open: boolean;
@@ -29,30 +30,30 @@ export function WebkameraVerwaltungViewDialog({ open, onClose, record, onEdit }:
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Webkamera-Verwaltung anzeigen</DialogTitle>
+          <DialogTitle>{t('view_entity', { entity: appLabel('webkamera_verwaltung') })}</DialogTitle>
         </DialogHeader>
         <div className="flex justify-end">
           <Button size="sm" onClick={() => { onClose(); onEdit(record); }}>
             <IconPencil className="h-3.5 w-3.5 mr-1.5" />
-            Bearbeiten
+            {t('edit_button')}
           </Button>
         </div>
 
         <div className="space-y-4">
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Kameraname</Label>
+            <Label className="text-xs text-muted-foreground">{fieldLabel('webkamera_verwaltung', 'kamera_name')}</Label>
             <p className="text-sm">{record.fields.kamera_name ?? '—'}</p>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Standortbeschreibung</Label>
+            <Label className="text-xs text-muted-foreground">{fieldLabel('webkamera_verwaltung', 'kamera_standort')}</Label>
             <p className="text-sm">{record.fields.kamera_standort ?? '—'}</p>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Stream-URL</Label>
+            <Label className="text-xs text-muted-foreground">{fieldLabel('webkamera_verwaltung', 'kamera_url')}</Label>
             <p className="text-sm">{record.fields.kamera_url ?? '—'}</p>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Geografischer Standort</Label>
+            <Label className="text-xs text-muted-foreground">{fieldLabel('webkamera_verwaltung', 'kamera_geo')}</Label>
             {record.fields.kamera_geo?.info && (
               <p className="text-sm text-muted-foreground break-words whitespace-normal">{record.fields.kamera_geo.info}</p>
             )}
@@ -67,23 +68,23 @@ export function WebkameraVerwaltungViewDialog({ open, onClose, record, onEdit }:
               <MapRouteLinks lat={record.fields.kamera_geo.lat} long={record.fields.kamera_geo.long} className="mt-1" />
             )}
             <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
-              {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
+              {showCoords ? t('fr_hide_coords') : t('fr_show_coords')}
               <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
             </button>
             {showCoords && (
               <div className="grid grid-cols-2 gap-2 text-sm">
-                <div><span className="text-xs text-muted-foreground">Breitengrad:</span> {record.fields.kamera_geo?.lat?.toFixed(6) ?? '—'}</div>
-                <div><span className="text-xs text-muted-foreground">Längengrad:</span> {record.fields.kamera_geo?.long?.toFixed(6) ?? '—'}</div>
+                <div><span className="text-xs text-muted-foreground">{t('fr_lat')}:</span> {record.fields.kamera_geo?.lat?.toFixed(6) ?? '—'}</div>
+                <div><span className="text-xs text-muted-foreground">{t('fr_long')}:</span> {record.fields.kamera_geo?.long?.toFixed(6) ?? '—'}</div>
               </div>
             )}
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Beschreibung</Label>
+            <Label className="text-xs text-muted-foreground">{fieldLabel('webkamera_verwaltung', 'kamera_beschreibung')}</Label>
             <p className="text-sm whitespace-pre-wrap">{record.fields.kamera_beschreibung ?? '—'}</p>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">Status</Label>
-            <Badge variant="secondary">{record.fields.kamera_status?.label ?? '—'}</Badge>
+            <Label className="text-xs text-muted-foreground">{fieldLabel('webkamera_verwaltung', 'kamera_status')}</Label>
+            <Badge variant="secondary">{lookupLabel('webkamera_verwaltung', 'kamera_status', record.fields.kamera_status?.key) ?? record.fields.kamera_status?.label ?? '—'}</Badge>
           </div>
           <div className="pt-2 border-t border-border">
             <AttachmentsSection appId={APP_IDS.WEBKAMERA_VERWALTUNG} recordId={record.record_id} readOnly />

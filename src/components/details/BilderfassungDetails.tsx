@@ -4,6 +4,7 @@ import { extractRecordId } from '@/services/livingAppsService';
 import {
   RecordSection, RecordField, RecordRelation, RecordAttachments,
 } from '@/components/widgets/RecordView';
+import { t, appLabel, fieldLabel } from '@/i18n';
 import { MediaThumbnail } from '@/components/widgets/MediaViewer';
 
 export interface BilderfassungDetailsProps {
@@ -23,35 +24,35 @@ export function BilderfassungDetails({
   const kamera_referenzTarget = webkameraVerwaltungList.find(r => r.record_id === extractRecordId(record.fields.kamera_referenz));
   return (
     <>
-      <RecordSection title="Details" cols={2}>
-        <RecordField label="Schritt1" className="md:col-span-2">
+      <RecordSection title={t('details')} cols={2}>
+        <RecordField label={fieldLabel('bilderfassung', 'schritt1')} className="md:col-span-2">
           {record.fields.schritt1 ? (
             <MediaThumbnail src={record.fields.schritt1 as string} fit="contain" className="max-h-64 w-full rounded-lg" />
           ) : '—'}
         </RecordField>
-        <RecordField label="Referenzbild" className="md:col-span-2">
+        <RecordField label={fieldLabel('bilderfassung', 'referenzbild_datei')} className="md:col-span-2">
           {record.fields.referenzbild_datei ? (
             <MediaThumbnail src={record.fields.referenzbild_datei as string} fit="contain" className="max-h-64 w-full rounded-lg" />
           ) : '—'}
         </RecordField>
-        <RecordField label="Aufnahmezeitpunkt" value={record.fields.aufnahmezeitpunkt} format="datetime" />
-        <RecordField label="Bild" className="md:col-span-2">
+        <RecordField label={fieldLabel('bilderfassung', 'aufnahmezeitpunkt')} value={record.fields.aufnahmezeitpunkt} format="datetime" />
+        <RecordField label={fieldLabel('bilderfassung', 'bild_datei')} className="md:col-span-2">
           {record.fields.bild_datei ? (
             <MediaThumbnail src={record.fields.bild_datei as string} fit="contain" className="max-h-64 w-full rounded-lg" />
           ) : '—'}
         </RecordField>
-        <RecordField label="Notiz" value={record.fields.bild_notiz} format="longtext" className="md:col-span-2" />
-        <RecordField label="Bildqualität" value={record.fields.bild_qualitaet} format="pill" />
-        <RecordField label="Prompt" value={record.fields.ki_prompt} format="longtext" className="md:col-span-2" />
-        <RecordField label="KI-Auswertung" value={record.fields.ki_auswertung} format="longtext" className="md:col-span-2" />
-        <RecordField label="Messwert" value={record.fields.ki_messwert} format="text" />
-        <RecordField label="Kriterium erfüllt" value={record.fields.ki_kriterium_erfuellt} format="bool" />
+        <RecordField label={fieldLabel('bilderfassung', 'bild_notiz')} value={record.fields.bild_notiz} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('bilderfassung', 'bild_qualitaet')} value={record.fields.bild_qualitaet} format="pill" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_prompt')} value={record.fields.ki_prompt} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_auswertung')} value={record.fields.ki_auswertung} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_messwert')} value={record.fields.ki_messwert} format="text" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_kriterium_erfuellt')} value={record.fields.ki_kriterium_erfuellt} format="bool" />
       </RecordSection>
 
       {/* N:1 — verknüpfte Records: IMMER klickbar, nie eine Text-Sackgasse. */}
-      <RecordSection title="Verknüpft" cols={1}>
+      <RecordSection title={t('relations')} cols={1}>
         <RecordRelation
-          label="Webkamera"
+          label={fieldLabel('bilderfassung', 'kamera_referenz')}
           name={kamera_referenzTarget?.fields.kamera_name ?? '—'}
           meta={[kamera_referenzTarget?.fields.kamera_standort].filter(Boolean).join(' · ') || undefined}
           onClick={kamera_referenzTarget && onOpenWebkameraVerwaltung ? () => onOpenWebkameraVerwaltung!(kamera_referenzTarget!) : undefined}

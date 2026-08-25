@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/DatePicker';
 import { lookupKey } from '@/lib/formatters';
+import { tx } from '@/i18n';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
 const PROXY_BASE = '';
@@ -24,7 +25,7 @@ async function submitPublicForm(fields: Record<string, unknown>, captchaToken: s
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || 'Submission failed');
+    throw new Error(err || tx('Submission failed'));
   }
   return res.json();
 }
@@ -83,7 +84,7 @@ export default function PublicFormBilderfassung() {
     e.preventDefault();
     const token = readCaptchaToken();
     if (!token) {
-      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      setError(tx('Bitte warte auf die Spam-Prüfung und versuche es erneut.'));
       return;
     }
     setSubmitting(true);
@@ -92,7 +93,7 @@ export default function PublicFormBilderfassung() {
       await submitPublicForm(cleanFields(fields), token);
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
+      setError(err.message || tx('Etwas ist schiefgelaufen. Bitte versuche es erneut.'));
     } finally {
       setSubmitting(false);
     }
@@ -107,10 +108,10 @@ export default function PublicFormBilderfassung() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold">Vielen Dank!</h2>
-          <p className="text-muted-foreground">Deine Eingabe wurde erfolgreich übermittelt.</p>
+          <h2 className="text-xl font-bold">{tx('Vielen Dank!')}</h2>
+          <p className="text-muted-foreground">{tx('Deine Eingabe wurde erfolgreich übermittelt.')}</p>
           <Button variant="outline" className="mt-4" onClick={() => { setSubmitted(false); setFields({}); }}>
-            Weitere Eingabe
+            {tx('Weitere Eingabe')}
           </Button>
         </div>
       </div>
@@ -121,12 +122,12 @@ export default function PublicFormBilderfassung() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Bilderfassung — Formular</h1>
+          <h1 className="text-2xl font-bold text-foreground">{tx('Bilderfassung — Formular')}</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
-            <Label htmlFor="aufnahmezeitpunkt">Aufnahmezeitpunkt *</Label>
+            <Label htmlFor="aufnahmezeitpunkt">{tx('Aufnahmezeitpunkt *')}</Label>
             <DatePicker
               id="aufnahmezeitpunkt"
               placeholder=""
@@ -137,7 +138,7 @@ export default function PublicFormBilderfassung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="bild_notiz">Notiz</Label>
+            <Label htmlFor="bild_notiz">{tx('Notiz')}</Label>
             <Textarea
               id="bild_notiz"
               placeholder=""
@@ -147,7 +148,7 @@ export default function PublicFormBilderfassung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="bild_qualitaet">Bildqualität</Label>
+            <Label htmlFor="bild_qualitaet">{tx('Bildqualität')}</Label>
             <div role="radiogroup" className="flex flex-wrap gap-1.5">
               <button
                 type="button"
@@ -160,7 +161,7 @@ export default function PublicFormBilderfassung() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Gut
+                {tx('Gut')}
               </button>
               <button
                 type="button"
@@ -173,7 +174,7 @@ export default function PublicFormBilderfassung() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Mittel
+                {tx('Mittel')}
               </button>
               <button
                 type="button"
@@ -186,12 +187,12 @@ export default function PublicFormBilderfassung() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Schlecht
+                {tx('Schlecht')}
               </button>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ki_prompt">Prompt</Label>
+            <Label htmlFor="ki_prompt">{tx('Prompt')}</Label>
             <Textarea
               id="ki_prompt"
               placeholder=""
@@ -201,7 +202,7 @@ export default function PublicFormBilderfassung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ki_auswertung">KI-Auswertung</Label>
+            <Label htmlFor="ki_auswertung">{tx('KI-Auswertung')}</Label>
             <Textarea
               id="ki_auswertung"
               placeholder=""
@@ -211,7 +212,7 @@ export default function PublicFormBilderfassung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ki_messwert">Messwert</Label>
+            <Label htmlFor="ki_messwert">{tx('Messwert')}</Label>
             <Input
               id="ki_messwert"
               type="number"
@@ -223,14 +224,14 @@ export default function PublicFormBilderfassung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ki_kriterium_erfuellt">Kriterium erfüllt</Label>
+            <Label htmlFor="ki_kriterium_erfuellt">{tx('Kriterium erfüllt')}</Label>
             <div className="flex items-center gap-2 pt-1">
               <Checkbox
                 id="ki_kriterium_erfuellt"
                 checked={!!fields.ki_kriterium_erfuellt}
                 onCheckedChange={(v) => setFields(f => ({ ...f, ki_kriterium_erfuellt: !!v }))}
               />
-              <Label htmlFor="ki_kriterium_erfuellt" className="font-normal">Kriterium erfüllt</Label>
+              <Label htmlFor="ki_kriterium_erfuellt" className="font-normal">{tx('Kriterium erfüllt')}</Label>
             </div>
           </div>
 
@@ -248,12 +249,12 @@ export default function PublicFormBilderfassung() {
           )}
 
           <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Wird gesendet...' : 'Absenden'}
+            {submitting ? tx('Wird gesendet...') : tx('Absenden')}
           </Button>
         </form>
 
         <p className="text-xs text-muted-foreground text-center mt-4">
-          Powered by Klar
+          {tx('Powered by Klar')}
         </p>
       </div>
     </div>

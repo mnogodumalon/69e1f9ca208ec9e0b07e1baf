@@ -15,12 +15,12 @@ import { BilderfassungDialog } from '@/components/dialogs/BilderfassungDialog';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { PageShell } from '@/components/PageShell';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
+import { t, appLabel, fieldLabel, lookupLabel, dateFnsLocale, dateFormat } from '@/i18n';
 import { format, parseISO } from 'date-fns';
-import { de } from 'date-fns/locale';
 
 function formatDate(d?: string) {
   if (!d) return '—';
-  try { return format(parseISO(d), 'dd.MM.yyyy', { locale: de }); } catch { return d; }
+  try { return format(parseISO(d), dateFormat(), { locale: dateFnsLocale() }); } catch { return d; }
 }
 
 export default function BilderfassungPage() {
@@ -119,18 +119,18 @@ export default function BilderfassungPage() {
 
   return (
     <PageShell
-      title="Bilderfassung"
-      subtitle={`${records.length} Bilderfassung im System`}
+      title={appLabel('bilderfassung')}
+      subtitle={`${records.length} ${t('in_system', { entity: appLabel('bilderfassung') })}`}
       action={
         <Button onClick={() => setDialogOpen(true)} className="shrink-0 rounded-full shadow-sm">
-          <IconPlus className="h-4 w-4 mr-2" /> Hinzufügen
+          <IconPlus className="h-4 w-4 mr-2" /> {t('add')}
         </Button>
       }
     >
       <div className="relative w-full max-w-sm">
         <IconSearch className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Bilderfassung suchen..."
+          placeholder={t('search_entity', { entity: appLabel('bilderfassung') })}
           value={search}
           onChange={e => setSearch(e.target.value)}
           className="pl-9"
@@ -142,71 +142,71 @@ export default function BilderfassungPage() {
             <TableRow className="border-b border-input">
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('schritt1')}>
                 <span className="inline-flex items-center gap-1">
-                  Schritt1
+                  {fieldLabel('bilderfassung', 'schritt1')}
                   {sortKey === 'schritt1' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('referenzbild_datei')}>
                 <span className="inline-flex items-center gap-1">
-                  Referenzbild
+                  {fieldLabel('bilderfassung', 'referenzbild_datei')}
                   {sortKey === 'referenzbild_datei' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('kamera_referenz')}>
                 <span className="inline-flex items-center gap-1">
-                  Webkamera
+                  {fieldLabel('bilderfassung', 'kamera_referenz')}
                   {sortKey === 'kamera_referenz' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('aufnahmezeitpunkt')}>
                 <span className="inline-flex items-center gap-1">
-                  Aufnahmezeitpunkt
+                  {fieldLabel('bilderfassung', 'aufnahmezeitpunkt')}
                   {sortKey === 'aufnahmezeitpunkt' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('bild_datei')}>
                 <span className="inline-flex items-center gap-1">
-                  Bild
+                  {fieldLabel('bilderfassung', 'bild_datei')}
                   {sortKey === 'bild_datei' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('bild_notiz')}>
                 <span className="inline-flex items-center gap-1">
-                  Notiz
+                  {fieldLabel('bilderfassung', 'bild_notiz')}
                   {sortKey === 'bild_notiz' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('bild_qualitaet')}>
                 <span className="inline-flex items-center gap-1">
-                  Bildqualität
+                  {fieldLabel('bilderfassung', 'bild_qualitaet')}
                   {sortKey === 'bild_qualitaet' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('ki_prompt')}>
                 <span className="inline-flex items-center gap-1">
-                  Prompt
+                  {fieldLabel('bilderfassung', 'ki_prompt')}
                   {sortKey === 'ki_prompt' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('ki_auswertung')}>
                 <span className="inline-flex items-center gap-1">
-                  KI-Auswertung
+                  {fieldLabel('bilderfassung', 'ki_auswertung')}
                   {sortKey === 'ki_auswertung' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('ki_messwert')}>
                 <span className="inline-flex items-center gap-1">
-                  Messwert
+                  {fieldLabel('bilderfassung', 'ki_messwert')}
                   {sortKey === 'ki_messwert' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
               <TableHead className="uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6 cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => toggleSort('ki_kriterium_erfuellt')}>
                 <span className="inline-flex items-center gap-1">
-                  Kriterium erfüllt
+                  {fieldLabel('bilderfassung', 'ki_kriterium_erfuellt')}
                   {sortKey === 'ki_kriterium_erfuellt' ? (sortDir === 'asc' ? <IconArrowUp size={14} /> : <IconArrowDown size={14} />) : <IconArrowsUpDown size={14} className="opacity-30" />}
                 </span>
               </TableHead>
-              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">Aktionen</TableHead>
+              <TableHead className="w-24 uppercase text-xs font-semibold text-secondary-foreground tracking-wider px-6">{t('actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -218,11 +218,11 @@ export default function BilderfassungPage() {
                 <TableCell className="text-muted-foreground">{formatDate(record.fields.aufnahmezeitpunkt)}</TableCell>
                 <TableCell>{record.fields.bild_datei ? <div className="relative h-8 w-8 rounded bg-muted overflow-hidden"><div className="absolute inset-0 flex items-center justify-center"><IconFileText size={14} className="text-muted-foreground" /></div><img src={record.fields.bild_datei} alt="" className="relative h-full w-full object-cover" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} /></div> : '—'}</TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.bild_notiz ?? '—'}</span></TableCell>
-                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{record.fields.bild_qualitaet?.label ?? '—'}</span></TableCell>
+                <TableCell><span className="inline-flex items-center bg-secondary border border-[#bfdbfe] text-[#2563eb] rounded-[10px] px-2 py-1 text-sm font-medium">{lookupLabel('bilderfassung', 'bild_qualitaet', record.fields.bild_qualitaet?.key) ?? record.fields.bild_qualitaet?.label ?? '—'}</span></TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.ki_prompt ?? '—'}</span></TableCell>
                 <TableCell className="max-w-xs"><span className="truncate block">{record.fields.ki_auswertung ?? '—'}</span></TableCell>
                 <TableCell>{record.fields.ki_messwert ?? '—'}</TableCell>
-                <TableCell><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${record.fields.ki_kriterium_erfuellt ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{record.fields.ki_kriterium_erfuellt ? 'Ja' : 'Nein'}</span></TableCell>
+                <TableCell><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${record.fields.ki_kriterium_erfuellt ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>{record.fields.ki_kriterium_erfuellt ? t('yes') : t('no')}</span></TableCell>
                 <TableCell>
                   <div className="flex gap-1">
                     <Button variant="ghost" size="icon" onClick={() => setEditingRecord(record)}>
@@ -238,7 +238,7 @@ export default function BilderfassungPage() {
             {filtered.length === 0 && (
               <TableRow>
                 <TableCell colSpan={12} className="text-center py-16 text-muted-foreground">
-                  {search ? 'Keine Ergebnisse gefunden.' : 'Noch keine Bilderfassung. Jetzt hinzufügen!'}
+                  {search ? t('no_results') : t('no_data_yet', { entity: appLabel('bilderfassung') })}
                 </TableCell>
               </TableRow>
             )}
@@ -261,8 +261,8 @@ export default function BilderfassungPage() {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}
-        title="Bilderfassung löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('bilderfassung') })}
+        description={t('confirm_delete_desc')}
       />
 
     </PageShell>

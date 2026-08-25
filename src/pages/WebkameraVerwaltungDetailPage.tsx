@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 import { formEnhancements } from '@/config/form-enhancements/WebkameraVerwaltung';
 import { evalComputed } from '@/config/form-enhancements/types';
+import { t, appLabel, fieldLabel, localeTag, CURRENCY } from '@/i18n';
 
 export default function WebkameraVerwaltungDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -56,11 +57,11 @@ export default function WebkameraVerwaltungDetailPage() {
   if (!record) {
     return (
       <RecordViewEmpty
-        title="Eintrag nicht gefunden"
+        title={t('not_found')}
         action={
           <Button variant="ghost" onClick={() => navigate('/webkamera-verwaltung')}>
             <IconArrowLeft className="h-4 w-4 mr-1.5" />
-            Zurück
+            {t('back')}
           </Button>
         }
       />
@@ -71,18 +72,18 @@ export default function WebkameraVerwaltungDetailPage() {
     <RecordView
       onBack={() => navigate('/webkamera-verwaltung')}
       onEdit={() => setEditing(true)}
-      backLabel="Zurück"
-      editLabel="Bearbeiten"
+      backLabel={t('back')}
+      editLabel={t('edit_button')}
     >
-      <RecordHeader title={record.fields.kamera_name ?? 'Webkamera-Verwaltung'} />
+      <RecordHeader title={record.fields.kamera_name ?? appLabel('webkamera_verwaltung')} />
 
       {(() => {
         const lookupLists: Record<string, unknown> = {
         };
         const fmtComputed = (k: string, n: number) =>
           /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k)
-            ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+            ? n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
         const computedFacts = Object.entries(formEnhancements.computed)
           .map(([key, formula]) => {
             const v = evalComputed(formula, record!.fields as Record<string, unknown>, { lookupLists });
@@ -94,12 +95,12 @@ export default function WebkameraVerwaltungDetailPage() {
         return computedFacts.length > 0 ? <RecordKeyFacts items={computedFacts} /> : null;
       })()}
 
-      <RecordSection title="Details" cols={2}>
-        <RecordField label="Kameraname" value={record.fields.kamera_name} format="text" />
-        <RecordField label="Standortbeschreibung" value={record.fields.kamera_standort} format="text" />
-        <RecordField label="Stream-URL" value={record.fields.kamera_url} format="url" />
-        <RecordField label="Beschreibung" value={record.fields.kamera_beschreibung} format="longtext" className="md:col-span-2" />
-        <RecordField label="Status" value={record.fields.kamera_status} format="pill" />
+      <RecordSection title={t('details')} cols={2}>
+        <RecordField label={fieldLabel('webkamera_verwaltung', 'kamera_name')} value={record.fields.kamera_name} format="text" />
+        <RecordField label={fieldLabel('webkamera_verwaltung', 'kamera_standort')} value={record.fields.kamera_standort} format="text" />
+        <RecordField label={fieldLabel('webkamera_verwaltung', 'kamera_url')} value={record.fields.kamera_url} format="url" />
+        <RecordField label={fieldLabel('webkamera_verwaltung', 'kamera_beschreibung')} value={record.fields.kamera_beschreibung} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('webkamera_verwaltung', 'kamera_status')} value={record.fields.kamera_status} format="pill" />
       </RecordSection>
 
       <RecordAttachments appId={APP_IDS.WEBKAMERA_VERWALTUNG} recordId={record.record_id} />
@@ -107,7 +108,7 @@ export default function WebkameraVerwaltungDetailPage() {
       <div className="flex justify-end pt-2">
         <Button variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
           <IconTrash className="h-4 w-4 mr-1.5" />
-          Löschen
+          {t('delete')}
         </Button>
       </div>
 
@@ -125,8 +126,8 @@ export default function WebkameraVerwaltungDetailPage() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
-        title="Webkamera-Verwaltung löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('webkamera_verwaltung') })}
+        description={t('confirm_delete_desc')}
       />
     </RecordView>
   );

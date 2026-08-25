@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { AI_PHOTO_SCAN, AI_PHOTO_LOCATION } from '@/config/ai-features';
 import { formEnhancements } from '@/config/form-enhancements/Bilderfassung';
 import { evalComputed } from '@/config/form-enhancements/types';
+import { t, appLabel, fieldLabel, localeTag, CURRENCY } from '@/i18n';
 
 export default function BilderfassungDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,11 +68,11 @@ export default function BilderfassungDetailPage() {
   if (!record) {
     return (
       <RecordViewEmpty
-        title="Eintrag nicht gefunden"
+        title={t('not_found')}
         action={
           <Button variant="ghost" onClick={() => navigate('/bilderfassung')}>
             <IconArrowLeft className="h-4 w-4 mr-1.5" />
-            Zurück
+            {t('back')}
           </Button>
         }
       />
@@ -82,10 +83,10 @@ export default function BilderfassungDetailPage() {
     <RecordView
       onBack={() => navigate('/bilderfassung')}
       onEdit={() => setEditing(true)}
-      backLabel="Zurück"
-      editLabel="Bearbeiten"
+      backLabel={t('back')}
+      editLabel={t('edit_button')}
     >
-      <RecordHeader title={'Bilderfassung'} />
+      <RecordHeader title={appLabel('bilderfassung')} />
 
       {(() => {
         const lookupLists: Record<string, unknown> = {
@@ -93,8 +94,8 @@ export default function BilderfassungDetailPage() {
         };
         const fmtComputed = (k: string, n: number) =>
           /(?:kosten|preis|betrag|gesamt|netto|brutto|summe|mwst|rabatt|anzahlung|umsatz|saldo)/i.test(k)
-            ? n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
-            : n.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+            ? n.toLocaleString(localeTag(), { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : n.toLocaleString(localeTag(), { maximumFractionDigits: 2 });
         const computedFacts = Object.entries(formEnhancements.computed)
           .map(([key, formula]) => {
             const v = evalComputed(formula, record!.fields as Record<string, unknown>, { lookupLists });
@@ -106,15 +107,15 @@ export default function BilderfassungDetailPage() {
         return computedFacts.length > 0 ? <RecordKeyFacts items={computedFacts} /> : null;
       })()}
 
-      <RecordSection title="Details" cols={2}>
-        <RecordField label="Webkamera" value={getWebkameraVerwaltungDisplayName(record.fields.kamera_referenz)} format="text" />
-        <RecordField label="Aufnahmezeitpunkt" value={record.fields.aufnahmezeitpunkt} format="datetime" />
-        <RecordField label="Notiz" value={record.fields.bild_notiz} format="longtext" className="md:col-span-2" />
-        <RecordField label="Bildqualität" value={record.fields.bild_qualitaet} format="pill" />
-        <RecordField label="Prompt" value={record.fields.ki_prompt} format="longtext" className="md:col-span-2" />
-        <RecordField label="KI-Auswertung" value={record.fields.ki_auswertung} format="longtext" className="md:col-span-2" />
-        <RecordField label="Messwert" value={record.fields.ki_messwert} format="text" />
-        <RecordField label="Kriterium erfüllt" value={record.fields.ki_kriterium_erfuellt} format="bool" />
+      <RecordSection title={t('details')} cols={2}>
+        <RecordField label={fieldLabel('bilderfassung', 'kamera_referenz')} value={getWebkameraVerwaltungDisplayName(record.fields.kamera_referenz)} format="text" />
+        <RecordField label={fieldLabel('bilderfassung', 'aufnahmezeitpunkt')} value={record.fields.aufnahmezeitpunkt} format="datetime" />
+        <RecordField label={fieldLabel('bilderfassung', 'bild_notiz')} value={record.fields.bild_notiz} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('bilderfassung', 'bild_qualitaet')} value={record.fields.bild_qualitaet} format="pill" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_prompt')} value={record.fields.ki_prompt} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_auswertung')} value={record.fields.ki_auswertung} format="longtext" className="md:col-span-2" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_messwert')} value={record.fields.ki_messwert} format="text" />
+        <RecordField label={fieldLabel('bilderfassung', 'ki_kriterium_erfuellt')} value={record.fields.ki_kriterium_erfuellt} format="bool" />
       </RecordSection>
 
       <RecordAttachments appId={APP_IDS.BILDERFASSUNG} recordId={record.record_id} />
@@ -122,7 +123,7 @@ export default function BilderfassungDetailPage() {
       <div className="flex justify-end pt-2">
         <Button variant="ghost" onClick={() => setDeleteOpen(true)} className="text-destructive hover:text-destructive">
           <IconTrash className="h-4 w-4 mr-1.5" />
-          Löschen
+          {t('delete')}
         </Button>
       </div>
 
@@ -141,8 +142,8 @@ export default function BilderfassungDetailPage() {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onConfirm={handleDelete}
-        title="Bilderfassung löschen"
-        description="Soll dieser Eintrag wirklich gelöscht werden? Diese Aktion kann nicht rückgängig gemacht werden."
+        title={t('delete_entity', { entity: appLabel('bilderfassung') })}
+        description={t('confirm_delete_desc')}
       />
     </RecordView>
   );

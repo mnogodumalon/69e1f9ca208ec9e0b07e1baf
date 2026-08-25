@@ -8,6 +8,7 @@ import { GeoMapPicker } from '@/components/GeoMapPicker';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
 import { ensureUploadableImage } from '@/lib/ai';
 import { lookupKey } from '@/lib/formatters';
+import { tx } from '@/i18n';
 
 // Empty PROXY_BASE → relative URLs (dashboard and form-proxy share the domain).
 const PROXY_BASE = '';
@@ -26,7 +27,7 @@ async function submitPublicForm(fields: Record<string, unknown>, captchaToken: s
   });
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(err || 'Submission failed');
+    throw new Error(err || tx('Submission failed'));
   }
   return res.json();
 }
@@ -62,7 +63,7 @@ export default function PublicFormWebkameraVerwaltung() {
 
   async function reverseGeocode(lat: number, lng: number): Promise<string> {
     try {
-      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+      const res = await fetch(tx`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
       const data = await res.json();
       return data.display_name ?? '';
     } catch { return ''; }
@@ -118,7 +119,7 @@ export default function PublicFormWebkameraVerwaltung() {
     e.preventDefault();
     const token = readCaptchaToken();
     if (!token) {
-      setError('Bitte warte auf die Spam-Prüfung und versuche es erneut.');
+      setError(tx('Bitte warte auf die Spam-Prüfung und versuche es erneut.'));
       return;
     }
     setSubmitting(true);
@@ -127,7 +128,7 @@ export default function PublicFormWebkameraVerwaltung() {
       await submitPublicForm(cleanFields(fields), token);
       setSubmitted(true);
     } catch (err: any) {
-      setError(err.message || 'Etwas ist schiefgelaufen. Bitte versuche es erneut.');
+      setError(err.message || tx('Etwas ist schiefgelaufen. Bitte versuche es erneut.'));
     } finally {
       setSubmitting(false);
     }
@@ -142,10 +143,10 @@ export default function PublicFormWebkameraVerwaltung() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-xl font-bold">Vielen Dank!</h2>
-          <p className="text-muted-foreground">Deine Eingabe wurde erfolgreich übermittelt.</p>
+          <h2 className="text-xl font-bold">{tx('Vielen Dank!')}</h2>
+          <p className="text-muted-foreground">{tx('Deine Eingabe wurde erfolgreich übermittelt.')}</p>
           <Button variant="outline" className="mt-4" onClick={() => { setSubmitted(false); setFields({}); }}>
-            Weitere Eingabe
+            {tx('Weitere Eingabe')}
           </Button>
         </div>
       </div>
@@ -156,12 +157,12 @@ export default function PublicFormWebkameraVerwaltung() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-lg">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">Webkamera-Verwaltung — Formular</h1>
+          <h1 className="text-2xl font-bold text-foreground">{tx('Webkamera-Verwaltung — Formular')}</h1>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-xl border border-border p-6 shadow-md">
           <div className="space-y-2">
-            <Label htmlFor="kamera_name">Kameraname *</Label>
+            <Label htmlFor="kamera_name">{tx('Kameraname *')}</Label>
             <Input
               id="kamera_name"
               placeholder=""
@@ -171,7 +172,7 @@ export default function PublicFormWebkameraVerwaltung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_standort">Standortbeschreibung *</Label>
+            <Label htmlFor="kamera_standort">{tx('Standortbeschreibung *')}</Label>
             <Input
               id="kamera_standort"
               placeholder=""
@@ -181,7 +182,7 @@ export default function PublicFormWebkameraVerwaltung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_url">Stream-URL</Label>
+            <Label htmlFor="kamera_url">{tx('Stream-URL')}</Label>
             <Input
               id="kamera_url"
               value={fields.kamera_url ?? ''}
@@ -189,18 +190,18 @@ export default function PublicFormWebkameraVerwaltung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_geo">Geografischer Standort</Label>
+            <Label htmlFor="kamera_geo">{tx('Geografischer Standort')}</Label>
             <div className="space-y-3">
               <Button type="button" variant="outline" className="w-full max-sm:h-11" disabled={locating} onClick={() => geoLocate("kamera_geo")}>
                 {locating ? <IconLoader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <IconCrosshair className="h-4 w-4 mr-1.5" />}
-                Aktuellen Standort verwenden
+                {tx('Aktuellen Standort verwenden')}
               </Button>
               <AddressAutocomplete
-                placeholder="Adresse suchen und auswählen…"
+                placeholder={tx('Adresse suchen und auswählen…')}
                 onSelect={r => setFields(f => ({ ...f, kamera_geo: { lat: r.lat, long: r.long, info: r.label } as any }))}
               />
               {geoFromPhoto && fields.kamera_geo && (
-                <p className="text-xs text-primary italic">Standort aus Foto übernommen</p>
+                <p className="text-xs text-primary italic">{tx('Standort aus Foto übernommen')}</p>
               )}
               {fields.kamera_geo?.info && (
                 <p className="text-sm text-muted-foreground break-words whitespace-normal">
@@ -215,13 +216,13 @@ export default function PublicFormWebkameraVerwaltung() {
                 />
               )}
               <button type="button" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 py-1 max-sm:py-2 transition-colors" onClick={() => setShowCoords(v => !v)}>
-                {showCoords ? 'Koordinaten verbergen' : 'Koordinaten anzeigen'}
+                {showCoords ? tx('Koordinaten verbergen') : tx('Koordinaten anzeigen')}
                 <IconChevronDown className={`h-3 w-3 transition-transform ${showCoords ? "rotate-180" : ""}`} />
               </button>
               {showCoords && (
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label className="text-xs text-muted-foreground">Breitengrad</Label>
+                    <Label className="text-xs text-muted-foreground">{tx('Breitengrad')}</Label>
                     <Input type="number" step="any"
                       value={fields.kamera_geo?.lat ?? ''}
                       onChange={e => {
@@ -231,7 +232,7 @@ export default function PublicFormWebkameraVerwaltung() {
                     />
                   </div>
                   <div>
-                    <Label className="text-xs text-muted-foreground">Längengrad</Label>
+                    <Label className="text-xs text-muted-foreground">{tx('Längengrad')}</Label>
                     <Input type="number" step="any"
                       value={fields.kamera_geo?.long ?? ''}
                       onChange={e => {
@@ -245,7 +246,7 @@ export default function PublicFormWebkameraVerwaltung() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_beschreibung">Beschreibung</Label>
+            <Label htmlFor="kamera_beschreibung">{tx('Beschreibung')}</Label>
             <Textarea
               id="kamera_beschreibung"
               placeholder=""
@@ -255,7 +256,7 @@ export default function PublicFormWebkameraVerwaltung() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="kamera_status">Status *</Label>
+            <Label htmlFor="kamera_status">{tx('Status *')}</Label>
             <div role="radiogroup" className="flex flex-wrap gap-1.5">
               <button
                 type="button"
@@ -268,7 +269,7 @@ export default function PublicFormWebkameraVerwaltung() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Aktiv
+                {tx('Aktiv')}
               </button>
               <button
                 type="button"
@@ -281,7 +282,7 @@ export default function PublicFormWebkameraVerwaltung() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                Inaktiv
+                {tx('Inaktiv')}
               </button>
               <button
                 type="button"
@@ -294,7 +295,7 @@ export default function PublicFormWebkameraVerwaltung() {
                     : 'bg-background text-foreground border-input hover:bg-accent'
                 }`}
               >
-                In Wartung
+                {tx('In Wartung')}
               </button>
             </div>
           </div>
@@ -313,12 +314,12 @@ export default function PublicFormWebkameraVerwaltung() {
           )}
 
           <Button type="submit" className="w-full" disabled={submitting}>
-            {submitting ? 'Wird gesendet...' : 'Absenden'}
+            {submitting ? tx('Wird gesendet...') : tx('Absenden')}
           </Button>
         </form>
 
         <p className="text-xs text-muted-foreground text-center mt-4">
-          Powered by Klar
+          {tx('Powered by Klar')}
         </p>
       </div>
     </div>
