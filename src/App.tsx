@@ -2,17 +2,12 @@ import '@/lib/sentry';
 import '@/lib/stale-bundle';
 import { Fragment, lazy, Suspense, useEffect, useState } from 'react';
 import { HashRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { locale, onLocaleChange, syncProfileLocale } from '@/i18n';
+import { locale, onLocaleChange, syncProfileLocale, t } from '@/i18n';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { ErrorBusProvider } from '@/components/ErrorBus';
 import { Layout } from '@/components/Layout';
 import DashboardOverview from '@/pages/DashboardOverview';
-import AdminPage from '@/pages/AdminPage';
 import PublicPagesAdmin from '@/pages/PublicPagesAdmin';
-import WebkameraVerwaltungPage from '@/pages/WebkameraVerwaltungPage';
-import WebkameraVerwaltungDetailPage from '@/pages/WebkameraVerwaltungDetailPage';
-import BilderfassungPage from '@/pages/BilderfassungPage';
-import BilderfassungDetailPage from '@/pages/BilderfassungDetailPage';
 // <custom:imports>
 // Lazy: public pages live outside <Layout> and only load on /#/public/:slug —
 // dashboard users never pay for them, anonymous visitors skip the dashboard.
@@ -29,11 +24,26 @@ import BilderfassungDetailPage from '@/pages/BilderfassungDetailPage';
 // arrival) must not tear the element down mid-chat; the element follows
 // <html lang> itself. Hidden on anonymous public routes; its 401 guard is
 // the backstop, not the mechanism.
+
+
+
+
 // </custom:imports>
 
 // Lazy: public pages live outside <Layout> and only load on /#/public/:slug —
 // dashboard users never pay for them, anonymous visitors skip the dashboard.
 const PublicPage = lazy(() => import('@/pages/public/PublicPage'));
+
+function RouteNotFound() {
+  const { pathname } = useLocation();
+  return (
+    <div className="max-w-xl mx-auto mt-16 rounded-[27px] bg-card shadow-lg p-8 space-y-3" role="alert">
+      <h1 className="text-xl font-semibold tracking-tight">{t('nf_title')}</h1>
+      <p className="text-sm text-muted-foreground break-all">{t('nf_message', { path: pathname })}</p>
+      <a href="#/" className="inline-flex text-sm font-medium text-primary hover:underline">{t('nf_back')}</a>
+    </div>
+  );
+}
 
 // Language switch = full remount below the router: every t()/label lookup
 // re-evaluates, the la-* widgets re-read <html lang>. Sits inside HashRouter
@@ -82,14 +92,12 @@ export default function App() {
               <Route path="public/:slug" element={<Suspense fallback={null}><PublicPage /></Suspense>} />
               <Route element={<Layout />}>
                 <Route index element={<DashboardOverview />} />
-                <Route path="webkamera-verwaltung" element={<WebkameraVerwaltungPage />} />
-                <Route path="webkamera-verwaltung/:id" element={<WebkameraVerwaltungDetailPage />} />
-                <Route path="bilderfassung" element={<BilderfassungPage />} />
-                <Route path="bilderfassung/:id" element={<BilderfassungDetailPage />} />
-                <Route path="admin" element={<AdminPage />} />
                 <Route path="verwaltung/oeffentliche-seiten" element={<PublicPagesAdmin />} />
                 {/* <custom:routes> */}
               {/* </custom:routes> */}
+                {/* An unknown hash (a bookmark from before a rebuild renamed the
+                    flows, a mistyped link) must not be a blank page. */}
+                <Route path="*" element={<RouteNotFound />} />
               </Route>
             </Routes>
             </LocaleGate>
