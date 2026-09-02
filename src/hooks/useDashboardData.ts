@@ -68,3 +68,6 @@ export function useDashboardData() {
 
   return { webkameraVerwaltung, setWebkameraVerwaltung, bilderfassung, setBilderfassung, loading, error, fetchAll, webkameraVerwaltungMap };
 }
+
+/** The hook's return — the `data` prop of DashboardOverview in the Ready-Wrapper form. */
+export type DashboardData = ReturnType<typeof useDashboardData>;
